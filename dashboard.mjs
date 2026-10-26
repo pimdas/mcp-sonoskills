@@ -1,3 +1,4 @@
+import {monthlyRevenue} from './monthly.mjs';
 import {analyze} from './analytics.mjs';
 import {financialOverview,invoiceIndex} from './finance.mjs';
 import {workspaceIndex} from './workspaces.mjs';
@@ -13,5 +14,5 @@ export function dashboard(data,filters={},config={}){
  const eligible=(data.invoices||[]).filter(i=>{const date=(i.opened_at||'').slice(0,10);return /^\d{4}-\d{2}-\d{2}$/.test(date)&&date<=cutoff;});
  const advance=financialOverview({...data,invoices:eligible},{ids,externalIds});
  const undated=invoiceIndex(data).filter(l=>l.invoice.status!=='concept'&&[...l.editionIds].some(id=>ids.has(id))&&!l.invoice.opened_at).length;
- return {workspaces,totals,advance2027:{totals:advance.totals,invoiceCount:advance.invoiceCount||0,cutoff,unallocated:advance.unallocated.filter(i=>advance.audit.invoices.find(a=>a.id===i.id)?.editionIds.some(id=>ids.has(id))).length,undated}};
+ return {workspaces,totals,monthly:monthlyRevenue(data,filters,config),advance2027:{totals:advance.totals,invoiceCount:advance.invoiceCount||0,cutoff,unallocated:advance.unallocated.filter(i=>advance.audit.invoices.find(a=>a.id===i.id)?.editionIds.some(id=>ids.has(id))).length,undated}};
 }
