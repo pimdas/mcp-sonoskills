@@ -87,3 +87,14 @@ Royalties en de betalingsimport zijn beperkt tot templates die aan de eLearning-
 ## Pagina’s
 
 Elke werkruimte toont de eigen analyses én cursuslijst op de eigen route: `/overview`, `/handson`, `/online/elearning`, `/online/on-demand`, `/online/live`, `/products`, `/external` en `/other`. Filters, sortering, uitklapbare edities en CSV-export werken op die pagina. Er is geen aparte pagina Cursussen meer. Oude `/courses`-links worden doorgestuurd naar de bijbehorende werkruimte met behoud van queryfilters. Royalties staat op `/royalties`; Databronnen en categorie-instellingen staan op `/data-sources`.
+
+
+## Orders en bevestiging
+
+Verkoopanalyses en meest/minst verkocht zijn gebaseerd op unieke orders met status `active` of `requested`. `canceled` en `denied` tellen niet mee. De import haalt catalogusvarianten via `/catalog/variants` op en koppelt orders via `catalog_variant_id` aan een editie, ook als er nog geen inschrijving is. De oude `planned_course_id` en inschrijvingskoppelingen worden eveneens meegenomen. Bij tegenstrijdige/meerdere editiekoppelingen wordt de order niet geschat verdeeld; het dashboard toont een melding.
+
+Een inschrijving is binnen de SonoSkills-workflow het bevestigingssignaal dat een cursus doorgaat. Het dashboard telt actieve/afgeronde inschrijvingen daarom apart als bewijs van bevestiging en telt ze niet boven op orders als verkoop. Een niet-geannuleerde editie met minimaal één actieve/afgeronde inschrijving krijgt het label Bevestigd. Zonder dit signaal staat er Nog niet bevestigd; de cursusstatus uit Eduframe blijft daarnaast zichtbaar.
+
+Geboekte plaatsen komt uit `number_of_students`, met het aantal order-items als terugval wanneer dit aantal ontbreekt. Eén order kan meerdere plaatsen boeken. Ontbrekende aantallen worden niet als één deelnemer verondersteld; de bezetting blijft dan onbekend. Boekingsbezetting is geboekte plaatsen / bekende capaciteit van niet-geannuleerde vaste edities. Het maanddiagram telt orders op boekingsdatum. Hands-on en Live blijven op cursusdatum gefilterd; online verkoop op boekingsdatum.
+
+Orderwaarde is de waarde van actieve/aangevraagde orders. Gefactureerd en Openstaand blijven factuurgegevens. Geen van deze waarden wordt als ontvangen omzet verondersteld: royalties blijven uitsluitend op betaalde betaalrecords gebaseerd. Na deze update is een synchronisatie nodig voor catalogusvariantkoppelingen en aantallen per order.

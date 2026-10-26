@@ -2,18 +2,19 @@ const root = 'https://api.eduframe.nl/api/v1/';
 export const resources = {
   categories: ['id','name','parent_id','position'],
   courses: ['id','name','title','category_id','code'],
+  catalog_variants: ['id','variantable_id','variantable_type'],
   course_variants: ['id','name'],
   course_locations: ['id','name'],
   planned_courses: ['id','type','course_id','course_variant_id','course_location_id','start_date','end_date','status','current_participants','confirmed_active_and_completed_enrollments_count','max_participants','min_participants','currency'],
   enrollments: ['id','student_id','planned_course_id','order_id','status','created_at'],
-  orders: ['id','planned_course_id','status','total_cost_excl','created_at','currency'],
+  orders: ['id','planned_course_id','catalog_variant_id','number_of_students','order_items','status','total_cost_excl','total_cost_incl','created_at','currency'],
   invoices: ['id','order_id','number','status','currency','total_excl','total_incl','total_open','opened_at','created_at']
 };
 export async function fetchResource(resource, token, fetcher=fetch, pause=ms=>new Promise(r=>setTimeout(r,ms))) {
   const paymentPath=/^invoices\/\d+\/payments$/.test(resource);
   if (!Object.hasOwn(resources,resource)&&!paymentPath) throw Error('Onbekende databron');
   const fields=paymentPath?['id','invoice_id','amount','currency','status','date']:resources[resource];
-  let next = new URL(`${resource}?per_page=100`,root), result=[], seen=new Set();
+  let next = new URL(`${resource==='catalog_variants'?'catalog/variants':resource}?per_page=100`,root), result=[], seen=new Set();
   while(next) {
     if(next.origin!==new URL(root).origin || !next.pathname.startsWith('/api/v1/')) throw Error('Ongeldige paginaverwijzing');
     if(seen.has(next.href)) throw Error('Herhaalde paginaverwijzing');
@@ -31,6 +32,7 @@ export async function fetchResource(resource, token, fetcher=fetch, pause=ms=>ne
     if(!response.ok) throw Error(`Eduframe ${resource}: HTTP ${response.status}`);
     const rows=await response.json();
     if(!Array.isArray(rows) || rows.some(r=>!Number.isInteger(r.id))) throw Error(`Onverwacht antwoord voor ${resource}`);
+    if(resource==='orders')for(const row of rows)if(Array.isArray(row.order_items))row.order_items=row.order_items.map(item=>({id:item.id}));
     result.push(...rows.map(row=>Object.fromEntries(fields.filter(k=>row[k]!==undefined).map(k=>[k,row[k]]))));
     const link=response.headers.get('link')||'';
     const href=link.split(',').map(s=>s.match(/<([^>]+)>;\s*rel="next"/)).find(Boolean)?.[1];

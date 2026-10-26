@@ -1,3 +1,4 @@
+import {orderIndex} from './orders.mjs';
 import {workspaceIndex} from './workspaces.mjs';
 import {randomUUID} from 'node:crypto';
 export class InputError extends Error {}
@@ -12,10 +13,9 @@ export function templateOptions(data,config={}){const index=workspaceIndex(data,
 export function invoiceTargets(data){
  const editions=new Map((data.planned_courses||[]).map(e=>[e.id,e]));
  const byOrder=new Map();for(const e of data.enrollments||[]){if(!byOrder.has(e.order_id))byOrder.set(e.order_id,new Set());byOrder.get(e.order_id).add(e.planned_course_id);}
- const orders=new Map((data.orders||[]).map(o=>[o.id,o]));
+ const links=orderIndex(data);
  return (data.invoices||[]).map(invoice=>{
-  const order=orders.get(invoice.order_id),ids=new Set(byOrder.get(invoice.order_id)||[]);
-  if(order?.planned_course_id)ids.add(order.planned_course_id);
+  const ids=new Set(links.get(invoice.order_id)?.editionIds||byOrder.get(invoice.order_id)||[]);
   const linked=[...ids].map(id=>editions.get(id)).filter(Boolean),templates=new Set(linked.map(e=>e.course_id));
   return {invoice,courseId:templates.size===1?[...templates][0]:null,editionIds:[...ids],courseIds:[...templates],ambiguous:templates.size!==1||linked.length!==ids.size};
  });
