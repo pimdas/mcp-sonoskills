@@ -24,7 +24,9 @@ Eduframe scopes voor deze import: `courses:read`, `enrollments:read`, `orders:re
 ## Inbegrepen
 
 - Login met acht uur geldige, ondertekende HttpOnly/Secure/SameSite-cookies, verzoekbeveiliging en een limiet op loginpogingen. Eén beheeraccount via variables.
-- Filters op startdatum van de cursus, opleiding en locatie.
+- Werkruimtes Alle cursussen, Vaste cursussen en Flexibele cursussen; selectie op het expliciete Eduframe-editietype.
+- Categorieën (inclusief bovenliggende categorieën), templates en uitklapbare edities met eigen ID.
+- Filters op categorie, template, locatie en periode. Vaste/alle cursussen: startdatum editie. Flexibele cursussen: boekingsdatum order, met inschrijfdatum als terugval.
 - Cursusedities, actieve/afgeronde inschrijvingen, gewogen bezetting en terugkerende deelnemers.
 - Boekingsmaand via orderdatum, met inschrijfdatum als terugval.
 - Gefactureerd excl. btw en openstaand incl. btw, apart per valuta. Geen optelling van verschillende valuta; conceptfacturen uitgesloten. Dit is geen boekhoudkundige omzetverantwoording of daadwerkelijke betalingsanalyse.
@@ -34,7 +36,7 @@ Eduframe scopes voor deze import: `courses:read`, `enrollments:read`, `orders:re
 
 ## Definities en grenzen
 
-De periodefilter selecteert cursussen op hun startdatum, niet facturen op factuurdatum. Flexibele cursussen zonder startdatum vallen buiten een datumselectie. Inschrijvingen tellen alleen bij `active` en `completed`. Bezetting: som actieve/afgeronde inschrijvingen gedeeld door som bekende maximale capaciteiten, exclusief geannuleerde cursussen. Terugkerend: deelnemer in de selectie met actieve/afgeronde inschrijvingen voor meer dan één unieke editie in de volledige import. Deelnemers worden geïdentificeerd met Eduframe-ID's; namen, e-mailadressen en vrije tekst worden niet geïmporteerd.
+Bij vaste/alle cursussen selecteert de periodefilter edities op hun startdatum, niet facturen op factuurdatum. Flexibele cursussen zonder startdatum vallen daar buiten een datumselectie. Gebruik de werkruimte Flexibele cursussen om op boekingsperiode te filteren. Daar blijven edities zichtbaar bij nul boekingen, en tellen facturen alleen mee via orders uit de geselecteerde boekingsperiode. Categoriefilters omvatten ook subcategorieën. Templates met beide editietypes verschijnen in beide werkruimtes, met alleen de bijbehorende edities. Na deze update is een succesvolle synchronisatie nodig voor categorieën en editietypes; oudere records met onbekend type worden niet gegokt. Inschrijvingen tellen alleen bij `active` en `completed`. Bezetting: som actieve/afgeronde inschrijvingen gedeeld door som bekende maximale capaciteiten, exclusief geannuleerde cursussen. Terugkerend: deelnemer in de selectie met actieve/afgeronde inschrijvingen voor meer dan één unieke editie in de volledige import. Deelnemers worden geïdentificeerd met Eduframe-ID's; namen, e-mailadressen en vrije tekst worden niet geïmporteerd.
 
 Facturen worden via orders aan de cursussen gekoppeld. Multi-cursusorders kunnen bij meerdere selecties terugkomen; tel losse selecties niet op. Creditnota's en exacte boekingsregels moeten nog met echte SonoSkills-data worden gevalideerd. Er zijn nog geen jaarvergelijking, historische snapshots, AI-vragen, profielanalyses of Exact-data.
 
