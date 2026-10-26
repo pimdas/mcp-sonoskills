@@ -1,13 +1,19 @@
 const base='https://connect.mailerlite.com/api/subscribers';
 export const localDay=()=>new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Amsterdam',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
-export async function importNewsletter(token,fetcher=fetch,pause=ms=>new Promise(r=>setTimeout(r,ms))){
- const counts={active:0,unsubscribed:0,unconfirmed:0,bounced:0,junk:0},created={},seen=new Set(),pages=new Set();let url=base+'?limit=100',unknownDates=0;
+export async function importNewsletter(token,fetcher=fetch,pause=ms=>new Promise(r=>setTimeout(r,ms)),onProgress=()=>{}){
+ const counts={active:0,unsubscribed:0,unconfirmed:0,bounced:0,junk:0},created={},seen=new Set(),pages=new Set();let url=base+'?limit=1000',unknownDates=0;const deadline=Date.now()+15*60*1000;
+ const remaining=()=>{const ms=deadline-Date.now();if(ms<=0)throw Error('MailerLite: import duurt langer dan 15 minuten. Probeer opnieuw; eerdere gegevens zijn bewaard.');return ms;};
+ const pauseRetry=async ms=>{if(ms>=remaining())throw Error('MailerLite: wachttijd overschrijdt de importlimiet. Probeer later opnieuw.');await pause(ms);};
  while(url){
-  const target=new URL(url);if(target.origin!=='https://connect.mailerlite.com'||target.pathname!=='/api/subscribers'||pages.has(target.href))throw Error('MailerLite: ongeldige paginering.');pages.add(target.href);
-  let response;for(let attempt=0;attempt<4;attempt++){await pause(550);response=await fetcher(target.href,{headers:{Authorization:'Bearer '+token,Accept:'application/json','X-Version':'2026-10-26'},redirect:'error',signal:AbortSignal.timeout(30000)});if(response.ok)break;if(![429,500,502,503,504].includes(response.status)||attempt===3)throw Error('MailerLite: ophalen mislukt (HTTP '+response.status+').');const raw=response.headers.get('retry-after');const wait=raw?(Number.isFinite(Number(raw))?Number(raw)*1000:Date.parse(raw)-Date.now()):1000*2**attempt;await pause(Math.max(1000,Math.min(300000,wait||1000)));}
-  const payload=await response.json();if(!Array.isArray(payload.data))throw Error('MailerLite: ongeldige response.');
+  remaining();onProgress({contacts:seen.size,pages:pages.size,phase:'fetching',updatedAt:new Date().toISOString()});
+  const target=new URL(url);if(target.origin!=='https://connect.mailerlite.com'||target.pathname!=='/api/subscribers'||pages.has(target.href))throw Error('MailerLite: ongeldige paginering.');pages.add(target.href);if(pages.size>10000)throw Error('MailerLite: te veel pagina’s; import afgebroken.');
+  let response;for(let attempt=0;attempt<4;attempt++){await pauseRetry(550);response=await fetcher(target.href,{headers:{Authorization:'Bearer '+token,Accept:'application/json','X-Version':'2026-10-26'},redirect:'error',signal:AbortSignal.timeout(Math.min(30000,remaining()))});if(response.ok)break;if(response.status===422&&target.searchParams.get('limit')==='1000'){target.searchParams.set('limit','100');continue;}if(![429,500,502,503,504].includes(response.status)||attempt===3)throw Error('MailerLite: ophalen mislukt (HTTP '+response.status+').');const raw=response.headers.get('retry-after');const wait=raw?(Number.isFinite(Number(raw))?Number(raw)*1000:Date.parse(raw)-Date.now()):1000*2**attempt;onProgress({contacts:seen.size,pages:pages.size-1,phase:'waiting',retrySeconds:Math.ceil((wait||1000)/1000),updatedAt:new Date().toISOString()});await pauseRetry(wait);}
+  if(!response.ok)throw Error('MailerLite: ophalen mislukt (HTTP '+response.status+').');
+  const before=seen.size;const payload=await response.json();if(!Array.isArray(payload.data))throw Error('MailerLite: ongeldige response.');
   for(const row of payload.data){if(row.id==null)throw Error('MailerLite: contact-ID ontbreekt.');const id=String(row.id);if(seen.has(id))continue;seen.add(id);if(!Object.hasOwn(counts,row.status))throw Error('MailerLite: onbekende contactstatus.');counts[row.status]++;const day=row.created_at?.slice(0,10);if(/^\d{4}-\d{2}-\d{2}$/.test(day||''))created[day]=(created[day]||0)+1;else unknownDates++;}
   url=payload.links?.next||null;
+  if(url&&seen.size===before)throw Error('MailerLite: paginering levert geen nieuwe contacten op; import afgebroken.');
+  onProgress({contacts:seen.size,pages:pages.size,phase:'fetching',updatedAt:new Date().toISOString()});
  }
  return {counts,total:seen.size,created,unknownDates,syncedAt:new Date().toISOString()};
 }

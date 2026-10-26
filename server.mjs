@@ -18,8 +18,8 @@ const salt=randomBytes(16), hash=scryptSync(password,salt,64);
 const db=await database();
 let snapshot=await db.get()||{data:{},syncedAt:null},syncing=false,syncError=null;
 let workspaceConfig=await db.getConfig();
-let newsletter=await db.getNewsletter(),newsletterSyncing=false,newsletterError=null;
-async function syncNewsletter(){if(newsletterSyncing||!process.env.MAILERLITE_API_TOKEN)return;newsletterSyncing=true;newsletterError=null;try{const next=recordNewsletter(newsletter,await importNewsletter(process.env.MAILERLITE_API_TOKEN));await db.putNewsletter(next);newsletter=next;}catch(e){newsletterError=e.message;}finally{newsletterSyncing=false;}}
+let newsletter=await db.getNewsletter(),newsletterSyncing=false,newsletterError=null,newsletterProgress=null;
+async function syncNewsletter(){if(newsletterSyncing||!process.env.MAILERLITE_API_TOKEN)return;newsletterSyncing=true;newsletterError=null;newsletterProgress={contacts:0,pages:0,phase:'fetching',startedAt:new Date().toISOString()};try{const next=recordNewsletter(newsletter,await importNewsletter(process.env.MAILERLITE_API_TOKEN,fetch,undefined,p=>{newsletterProgress={...newsletterProgress,...p};}));await db.putNewsletter(next);newsletter=next;}catch(e){newsletterError=e.name==='TimeoutError'?'MailerLite reageert niet binnen de tijdslimiet. Probeer opnieuw.':e.message;console.error('MailerLite synchronisatie:',newsletterError);}finally{newsletterSyncing=false;}}
 let paymentState=snapshot.paymentState||{ready:false,error:null,syncedAt:null};
 const paymentScope=()=>templateOptions(snapshot.data,workspaceConfig).map(t=>t.id).sort((a,b)=>a-b).join(',');
 function paymentsStatus(){return paymentState.scope===paymentScope()?paymentState:{...paymentState,ready:false,error:'Synchroniseer betalingen voor de huidige eLearning-categorie-indeling.'};}
@@ -80,7 +80,7 @@ const server=http.createServer(async(req,res)=>{
     }
     if(!session(req))return send(401,{error:'Log in om verder te gaan.'});
     if(url.pathname==='/api/logout' && req.method==='POST'){res.setHeader('Set-Cookie',`ss_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0${production?'; Secure':''}`);return send(200,{ok:true});}
-    if(url.pathname==='/api/status' && req.method==='GET')return send(200,{configured:!!process.env.EDUFRAME_API_TOKEN,syncedAt:snapshot.syncedAt,syncing,error:syncError,payments:paymentsStatus(),exactConnected:false,newsletter:{configured:!!process.env.MAILERLITE_API_TOKEN,syncedAt:newsletter.syncedAt||null,syncing:newsletterSyncing,error:newsletterError}});
+    if(url.pathname==='/api/status' && req.method==='GET')return send(200,{configured:!!process.env.EDUFRAME_API_TOKEN,syncedAt:snapshot.syncedAt,syncing,error:syncError,payments:paymentsStatus(),exactConnected:false,newsletter:{configured:!!process.env.MAILERLITE_API_TOKEN,syncedAt:newsletter.syncedAt||null,syncing:newsletterSyncing,error:newsletterError,progress:newsletterProgress}});
     if(url.pathname==='/api/newsletter/sync'&&req.method==='POST'){if(!process.env.MAILERLITE_API_TOKEN)return send(409,{error:'Voeg MAILERLITE_API_TOKEN toe in Railway.'});if(newsletterSyncing)return send(409,{error:'MailerLite wordt al gesynchroniseerd.'});void syncNewsletter();return send(202,{ok:true});}
     if(url.pathname==='/api/sync' && req.method==='POST'){
       if(!process.env.EDUFRAME_API_TOKEN)return send(409,{error:'Voeg EDUFRAME_API_TOKEN toe in Railway.'});
@@ -113,7 +113,7 @@ const server=http.createServer(async(req,res)=>{
       const filters=Object.fromEntries(url.searchParams);
       for(const k of ['from','to']) if(filters[k]&&!/^\d{4}-\d{2}-\d{2}$/.test(filters[k]))return send(400,{error:'Ongeldige datum'});
       if(filters.from && filters.to && filters.from>filters.to)return send(400,{error:'De einddatum ligt vóór de begindatum.'});
-      if(url.pathname==='/api/dashboard')return send(200,{...dashboard(snapshot.data,filters,workspaceConfig),newsletter:{...newsletterReport(newsletter,filters),configured:!!process.env.MAILERLITE_API_TOKEN,syncing:newsletterSyncing,error:newsletterError}});
+      if(url.pathname==='/api/dashboard')return send(200,{...dashboard(snapshot.data,filters,workspaceConfig),newsletter:{...newsletterReport(newsletter,filters),configured:!!process.env.MAILERLITE_API_TOKEN,syncing:newsletterSyncing,error:newsletterError,progress:newsletterProgress}});
       const result=analyze(snapshot.data,filters,workspaceConfig);
       if(url.pathname==='/api/finance-export'){res.setHeader('Content-Disposition','attachment; filename="sonoskills-omzetcontrole.csv"');return send(200,financeCsv(result.finance,filters,snapshot.syncedAt),'text/csv; charset=utf-8');}
       if(url.pathname==='/api/export'){res.setHeader('Content-Disposition','attachment; filename="sonoskills-cursussen.csv"');return send(200,csv(result.rows),'text/csv; charset=utf-8');}
