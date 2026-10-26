@@ -1,4 +1,5 @@
 import http from 'node:http';
+import {importNewsletter,recordNewsletter,newsletterReport} from './mailerlite.mjs';
 import {dashboard} from './dashboard.mjs';
 import {readFile} from 'node:fs/promises';
 import {randomBytes,createHmac,timingSafeEqual,scryptSync} from 'node:crypto';
@@ -17,6 +18,8 @@ const salt=randomBytes(16), hash=scryptSync(password,salt,64);
 const db=await database();
 let snapshot=await db.get()||{data:{},syncedAt:null},syncing=false,syncError=null;
 let workspaceConfig=await db.getConfig();
+let newsletter=await db.getNewsletter(),newsletterSyncing=false,newsletterError=null;
+async function syncNewsletter(){if(newsletterSyncing||!process.env.MAILERLITE_API_TOKEN)return;newsletterSyncing=true;newsletterError=null;try{const next=recordNewsletter(newsletter,await importNewsletter(process.env.MAILERLITE_API_TOKEN));await db.putNewsletter(next);newsletter=next;}catch(e){newsletterError=e.message;}finally{newsletterSyncing=false;}}
 let paymentState=snapshot.paymentState||{ready:false,error:null,syncedAt:null};
 const paymentScope=()=>templateOptions(snapshot.data,workspaceConfig).map(t=>t.id).sort((a,b)=>a-b).join(',');
 function paymentsStatus(){return paymentState.scope===paymentScope()?paymentState:{...paymentState,ready:false,error:'Synchroniseer betalingen voor de huidige eLearning-categorie-indeling.'};}
@@ -77,11 +80,12 @@ const server=http.createServer(async(req,res)=>{
     }
     if(!session(req))return send(401,{error:'Log in om verder te gaan.'});
     if(url.pathname==='/api/logout' && req.method==='POST'){res.setHeader('Set-Cookie',`ss_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0${production?'; Secure':''}`);return send(200,{ok:true});}
-    if(url.pathname==='/api/status' && req.method==='GET')return send(200,{configured:!!process.env.EDUFRAME_API_TOKEN,syncedAt:snapshot.syncedAt,syncing,error:syncError,payments:paymentsStatus(),exactConnected:false});
+    if(url.pathname==='/api/status' && req.method==='GET')return send(200,{configured:!!process.env.EDUFRAME_API_TOKEN,syncedAt:snapshot.syncedAt,syncing,error:syncError,payments:paymentsStatus(),exactConnected:false,newsletter:{configured:!!process.env.MAILERLITE_API_TOKEN,syncedAt:newsletter.syncedAt||null,syncing:newsletterSyncing,error:newsletterError}});
+    if(url.pathname==='/api/newsletter/sync'&&req.method==='POST'){if(!process.env.MAILERLITE_API_TOKEN)return send(409,{error:'Voeg MAILERLITE_API_TOKEN toe in Railway.'});if(newsletterSyncing)return send(409,{error:'MailerLite wordt al gesynchroniseerd.'});void syncNewsletter();return send(202,{ok:true});}
     if(url.pathname==='/api/sync' && req.method==='POST'){
       if(!process.env.EDUFRAME_API_TOKEN)return send(409,{error:'Voeg EDUFRAME_API_TOKEN toe in Railway.'});
       if(syncing)return send(409,{error:'Er loopt al een synchronisatie.'});
-      void sync();return send(202,{ok:true});
+      void sync();void syncNewsletter();return send(202,{ok:true});
     }
     if(url.pathname==='/api/workspaces'&&req.method==='GET')return send(200,workspaceIndex(snapshot.data,workspaceConfig));
     if(url.pathname==='/api/workspaces'&&req.method==='POST'){let mapping;try{mapping=validateMapping((await body(req)).mapping,snapshot.data);}catch(e){return send(400,{error:e.message});}await db.putConfig(mapping);workspaceConfig=mapping;return send(200,{ok:true});}
@@ -109,7 +113,7 @@ const server=http.createServer(async(req,res)=>{
       const filters=Object.fromEntries(url.searchParams);
       for(const k of ['from','to']) if(filters[k]&&!/^\d{4}-\d{2}-\d{2}$/.test(filters[k]))return send(400,{error:'Ongeldige datum'});
       if(filters.from && filters.to && filters.from>filters.to)return send(400,{error:'De einddatum ligt vóór de begindatum.'});
-      if(url.pathname==='/api/dashboard')return send(200,dashboard(snapshot.data,filters,workspaceConfig));
+      if(url.pathname==='/api/dashboard')return send(200,{...dashboard(snapshot.data,filters,workspaceConfig),newsletter:{...newsletterReport(newsletter,filters),configured:!!process.env.MAILERLITE_API_TOKEN,syncing:newsletterSyncing,error:newsletterError}});
       const result=analyze(snapshot.data,filters,workspaceConfig);
       if(url.pathname==='/api/finance-export'){res.setHeader('Content-Disposition','attachment; filename="sonoskills-omzetcontrole.csv"');return send(200,financeCsv(result.finance,filters,snapshot.syncedAt),'text/csv; charset=utf-8');}
       if(url.pathname==='/api/export'){res.setHeader('Content-Disposition','attachment; filename="sonoskills-cursussen.csv"');return send(200,csv(result.rows),'text/csv; charset=utf-8');}
@@ -120,7 +124,8 @@ const server=http.createServer(async(req,res)=>{
 });
 server.listen(Number(process.env.PORT||3000),'0.0.0.0',()=>console.log('SonoSkills dashboard gestart'));
 const minutes=Math.max(15,Number(process.env.SYNC_INTERVAL_MINUTES)||60);
-const timer=setInterval(()=>void sync(),minutes*60e3);
+const timer=setInterval(()=>{void sync();void syncNewsletter();},minutes*60e3);
+if(process.env.MAILERLITE_API_TOKEN)void syncNewsletter();
 if(process.env.EDUFRAME_API_TOKEN)void sync();
 async function stop(){clearInterval(timer);server.close();await db.close();process.exit(0);}
 process.on('SIGTERM',stop);process.on('SIGINT',stop);

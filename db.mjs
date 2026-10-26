@@ -1,5 +1,5 @@
 export async function database() {
-  let get, put, close, getRoyalties, updateRoyalties, getConfig, putConfig;
+  let get, put, close, getRoyalties, updateRoyalties, getConfig, putConfig, getNewsletter, putNewsletter;
   if(process.env.DATABASE_URL) {
     const {default:pg}=await import('pg');
     const pool=new pg.Pool({connectionString:process.env.DATABASE_URL,max:3});
@@ -13,6 +13,9 @@ export async function database() {
     await pool.query('CREATE TABLE IF NOT EXISTS workspace_config (id INTEGER PRIMARY KEY, payload JSONB NOT NULL)');
     getConfig=async()=> (await pool.query('SELECT payload FROM workspace_config WHERE id=1')).rows[0]?.payload||{};
     putConfig=async value=>{await pool.query('INSERT INTO workspace_config VALUES(1,$1) ON CONFLICT(id) DO UPDATE SET payload=EXCLUDED.payload',[JSON.stringify(value)]);};
+    await pool.query('CREATE TABLE IF NOT EXISTS newsletter_state (id INTEGER PRIMARY KEY, payload JSONB NOT NULL)');
+    getNewsletter=async()=> (await pool.query('SELECT payload FROM newsletter_state WHERE id=1')).rows[0]?.payload||{};
+    putNewsletter=async value=>{await pool.query('INSERT INTO newsletter_state VALUES(1,$1) ON CONFLICT(id) DO UPDATE SET payload=EXCLUDED.payload',[JSON.stringify(value)]);};
     close=()=>pool.end();
   } else {
     if(process.env.NODE_ENV==='production') throw Error('DATABASE_URL ontbreekt');
@@ -27,7 +30,10 @@ export async function database() {
     db.exec('CREATE TABLE IF NOT EXISTS workspace_config (id INTEGER PRIMARY KEY,payload TEXT NOT NULL)');
     getConfig=async()=>{const row=db.prepare('SELECT payload FROM workspace_config WHERE id=1').get();return row?JSON.parse(row.payload):{};};
     putConfig=async value=>{db.prepare('INSERT INTO workspace_config VALUES(1,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload').run(JSON.stringify(value));};
+    db.exec('CREATE TABLE IF NOT EXISTS newsletter_state (id INTEGER PRIMARY KEY,payload TEXT NOT NULL)');
+    getNewsletter=async()=>{const row=db.prepare('SELECT payload FROM newsletter_state WHERE id=1').get();return row?JSON.parse(row.payload):{};};
+    putNewsletter=async value=>{db.prepare('INSERT INTO newsletter_state VALUES(1,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload').run(JSON.stringify(value));};
     close=()=>db.close();
   }
-  return {get,put,close,getRoyalties,updateRoyalties,getConfig,putConfig};
+  return {get,put,close,getRoyalties,updateRoyalties,getConfig,putConfig,getNewsletter,putNewsletter};
 }
