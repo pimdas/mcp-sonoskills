@@ -1,5 +1,6 @@
 export function analyze(data, filters={}) {
   const courses=new Map((data.courses||[]).map(x=>[x.id,x]));
+  const variants=new Map((data.course_variants||[]).map(v=>[v.id,v.name]));
   const locations=new Map((data.course_locations||[]).map(x=>[x.id,x.name]));
   const categories=new Map((data.categories||[]).map(c=>[c.id,c]));
   function categoryPath(id) {
@@ -43,7 +44,7 @@ export function analyze(data, filters={}) {
   const students=new Set(active.map(x=>x.student_id).filter(x=>x!=null));
   const rows=editions.map(e=> {
     const participants=active.filter(a=>a.planned_course_id===e.id).length;
-    return {id:e.id,courseId:e.course_id,code:courses.get(e.course_id)?.code||'',categoryId:courses.get(e.course_id)?.category_id??null,category:categoryPath(courses.get(e.course_id)?.category_id),type:kind(e),name:courses.get(e.course_id)?.name||courses.get(e.course_id)?.title||`Cursus ${e.course_id}`,location:locations.get(e.course_location_id)||'Onbekend',start:e.start_date||'',status:e.status,participants,capacity:e.max_participants||null,occupancy:kind(e)!=='flexible' && e.max_participants?Math.round(participants/e.max_participants*100):null};
+    return {id:e.id,variantId:e.course_variant_id??null,variant:variants.get(e.course_variant_id)||(e.course_variant_id?`Variant #${e.course_variant_id}`:'—'),courseId:e.course_id,code:courses.get(e.course_id)?.code||'',categoryId:courses.get(e.course_id)?.category_id??null,category:categoryPath(courses.get(e.course_id)?.category_id),type:kind(e),name:courses.get(e.course_id)?.name||courses.get(e.course_id)?.title||`Cursus ${e.course_id}`,location:locations.get(e.course_location_id)||'Onbekend',start:e.start_date||'',status:e.status,participants,capacity:e.max_participants||null,occupancy:kind(e)!=='flexible' && e.max_participants?Math.round(participants/e.max_participants*100):null};
   }).sort((a,b)=>a.start.localeCompare(b.start));
   const usable=rows.filter(r=>r.capacity && r.type!=='flexible' && r.status!=='canceled');
   const capacity=usable.reduce((s,r)=>s+r.capacity,0);
@@ -67,5 +68,5 @@ export function analyze(data, filters={}) {
 }
 export function csv(rows) {
   const quote=v=>'"'+String(v??'').replace(/^[=+@\-\t\r]/,"'$&").replaceAll('"','""')+'"';
-  return '\ufeff'+[['Categorie','Template','Template-ID','Editie-ID','Type','Locatie','Startdatum','Status','Deelnemers','Capaciteit','Bezetting (%)'],...rows.map(r=>[r.category,r.name,r.courseId,r.id,r.type,r.location,r.start,r.status,r.participants,r.capacity,r.occupancy])].map(r=>r.map(quote).join(';')).join('\r\n');
+  return '\ufeff'+[['Categorie','Template','Template-ID','Editie-ID','Variant','Type','Locatie','Startdatum','Status','Deelnemers','Capaciteit','Bezetting (%)'],...rows.map(r=>[r.category,r.name,r.courseId,r.id,r.variant,r.type,r.location,r.start,r.status,r.participants,r.capacity,r.occupancy])].map(r=>r.map(quote).join(';')).join('\r\n');
 }

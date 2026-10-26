@@ -25,11 +25,11 @@ Eduframe scopes voor deze import: `courses:read`, `enrollments:read`, `orders:re
 
 - Login met acht uur geldige, ondertekende HttpOnly/Secure/SameSite-cookies, verzoekbeveiliging en een limiet op loginpogingen. Eén beheeraccount via variables.
 - Werkruimtes Alle cursussen, Vaste cursussen en Flexibele cursussen; selectie op het expliciete Eduframe-editietype.
-- Categorieën (inclusief bovenliggende categorieën), templates en uitklapbare edities met eigen ID.
+- Categorieën (inclusief bovenliggende categorieën), templates en uitklapbare edities met eigen ID en Eduframe-variantnaam.
 - Filters op categorie, template, locatie en periode. Vaste/alle cursussen: startdatum editie. Flexibele cursussen: boekingsdatum order, met inschrijfdatum als terugval.
 - Cursusedities, actieve/afgeronde inschrijvingen, gewogen bezetting en terugkerende deelnemers.
 - Boekingsmaand via orderdatum, met inschrijfdatum als terugval.
-- Gefactureerd excl. btw en openstaand incl. btw, apart per valuta. Geen optelling van verschillende valuta; conceptfacturen uitgesloten. Dit is geen boekhoudkundige omzetverantwoording of daadwerkelijke betalingsanalyse.
+- Gefactureerd en openstaand, apart per valuta. Geen optelling van verschillende valuta; conceptfacturen uitgesloten. Dit is geen boekhoudkundige omzetverantwoording of daadwerkelijke betalingsanalyse.
 - Cursusoverzicht en CSV-export voor Excel.
 - Eerste import bij start en automatische/handmatige synchronisatie, cursorpaginering, begrensde retries en rate limiting.
 - Volledige snapshot wordt pas atomair vervangen als alle resources succesvol zijn opgehaald. Vorige data blijft bij fouten beschikbaar. Verwijderde records verdwijnen bij de volgende succesvolle import.

@@ -27,16 +27,16 @@ async function load(){
     const summary=element('summary',''),title=element('div','','template-name');title.append(element('strong',template.name),element('small',`Template #${template.id}${template.code?' · '+template.code:''}`));
     summary.append(title,element('span',`${template.editions.length} edities`,'badge'),element('span',`${template.participants} inschrijvingen`,'badge'));details.append(summary);
     const scroll=element('div','','table-scroll'),table=element('table',''),head=element('thead',''),heading=element('tr','');
-    for(const text of ['Editie','Type','Locatie','Startdatum','Status','Deelnemers','Bezetting'])heading.append(element('th',text));head.append(heading);table.append(head);
+    for(const text of ['Editie','Variant','Type','Locatie','Startdatum','Status','Deelnemers','Bezetting'])heading.append(element('th',text));head.append(heading);table.append(head);
     const body=element('tbody','');
     for(const row of template.editions){const tr=element('tr','');
       const date=row.type==='flexible'?'Flexibele start':row.start?new Date(row.start.slice(0,10)+'T12:00:00').toLocaleDateString('nl-NL'):'Geen startdatum';
-      for(const text of [`#${row.id}`,{fixed:'Vast',flexible:'Flexibel',unknown:'Onbekend'}[row.type],row.type==='flexible'&&row.location==='Onbekend'?'—':row.location,date,labels[row.status]||row.status,row.participants+(row.capacity&&row.type!=='flexible'?' / '+row.capacity:''),row.occupancy==null?'—':row.occupancy+'%'])tr.append(element('td',text));body.append(tr);
+      for(const text of [`#${row.id}`,row.variant,{fixed:'Vast',flexible:'Flexibel',unknown:'Onbekend'}[row.type],row.type==='flexible'&&row.location==='Onbekend'?'—':row.location,date,labels[row.status]||row.status,row.participants+(row.capacity&&row.type!=='flexible'?' / '+row.capacity:''),row.occupancy==null?'—':row.occupancy+'%'])tr.append(element('td',text));body.append(tr);
     }
     table.append(body);scroll.append(table);details.append(scroll);$('#template-groups').append(details);
   }
   if(!d.templates.length)$('#template-groups').append(element('p',status?.syncedAt?'Geen templates met edities binnen deze selectie.':'Je templates en edities verschijnen na de eerste synchronisatie.'));
-  $('#finance').replaceChildren();for(const [currency,totals] of Object.entries(d.totals)){for(const [key,label] of [['invoiced','Gefactureerd excl. btw'],['open','Openstaand incl. btw']]){const row=element('div','','finance-row');row.append(element('span',label),element('strong',currency==='ONBEKEND'?totals[key]+' (valuta onbekend)':new Intl.NumberFormat('nl-NL',{style:'currency',currency}).format(totals[key])));$('#finance').append(row);}}
+  $('#finance').replaceChildren();for(const [currency,totals] of Object.entries(d.totals)){for(const [key,label] of [['invoiced','Gefactureerd'],['open','Openstaand']]){const row=element('div','','finance-row');row.append(element('span',label),element('strong',currency==='ONBEKEND'?totals[key]+' (valuta onbekend)':new Intl.NumberFormat('nl-NL',{style:'currency',currency}).format(totals[key])));$('#finance').append(row);}}
   if(!Object.keys(d.totals).length)$('#finance').append(element('p','Nog geen facturen in deze selectie.'));
   $('#chart').replaceChildren();const months=Object.entries(d.months).sort(([a],[b])=>a.localeCompare(b));const max=Math.max(1,...months.map(([,v])=>v));for(const [month,count] of months){const wrap=element('div','','bar-wrap'),bar=element('progress','','bar');bar.max=max;bar.value=count;bar.title=`${month}: ${count} inschrijvingen`;wrap.append(element('span',String(count)),bar,element('span',month));$('#chart').append(wrap);}
   if(!months.length)$('#chart').append(element('p','Nog geen inschrijvingen om te tonen.'));

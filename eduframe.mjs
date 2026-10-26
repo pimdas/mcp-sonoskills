@@ -2,8 +2,9 @@ const root = 'https://api.eduframe.nl/api/v1/';
 export const resources = {
   categories: ['id','name','parent_id','position'],
   courses: ['id','name','title','category_id','code'],
+  course_variants: ['id','name'],
   course_locations: ['id','name'],
-  planned_courses: ['id','type','course_id','course_location_id','start_date','end_date','status','current_participants','confirmed_active_and_completed_enrollments_count','max_participants','min_participants','currency'],
+  planned_courses: ['id','type','course_id','course_variant_id','course_location_id','start_date','end_date','status','current_participants','confirmed_active_and_completed_enrollments_count','max_participants','min_participants','currency'],
   enrollments: ['id','student_id','planned_course_id','order_id','status','created_at'],
   orders: ['id','planned_course_id','status','total_cost_excl','created_at','currency'],
   invoices: ['id','order_id','number','status','currency','total_excl','total_incl','total_open','opened_at','created_at']
