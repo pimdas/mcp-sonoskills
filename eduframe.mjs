@@ -8,7 +8,7 @@ export const resources = {
   planned_courses: ['id','type','course_id','course_variant_id','course_location_id','start_date','end_date','status','current_participants','confirmed_active_and_completed_enrollments_count','max_participants','min_participants','currency'],
   enrollments: ['id','student_id','planned_course_id','order_id','status','created_at'],
   orders: ['id','planned_course_id','catalog_variant_id','number_of_students','order_items','status','total_cost_excl','total_cost_incl','created_at','currency'],
-  invoices: ['id','order_id','number','status','currency','total_excl','total_incl','total_open','opened_at','created_at']
+  invoices: ['id','invoice_items','order_id','number','status','currency','total_excl','total_incl','total_open','opened_at','created_at']
 };
 export async function fetchResource(resource, token, fetcher=fetch, pause=ms=>new Promise(r=>setTimeout(r,ms))) {
   const paymentPath=/^invoices\/\d+\/payments$/.test(resource);
@@ -32,6 +32,7 @@ export async function fetchResource(resource, token, fetcher=fetch, pause=ms=>ne
     if(!response.ok) throw Error(`Eduframe ${resource}: HTTP ${response.status}`);
     const rows=await response.json();
     if(!Array.isArray(rows) || rows.some(r=>!Number.isInteger(r.id))) throw Error(`Onverwacht antwoord voor ${resource}`);
+    if(resource==='invoices')for(const row of rows)if(Array.isArray(row.invoice_items))row.invoice_items=row.invoice_items.map(item=>({id:item.id,catalog_variant_id:item.catalog_variant_id}));
     if(resource==='orders')for(const row of rows)if(Array.isArray(row.order_items))row.order_items=row.order_items.map(item=>({id:item.id}));
     result.push(...rows.map(row=>Object.fromEntries(fields.filter(k=>row[k]!==undefined).map(k=>[k,row[k]]))));
     const link=response.headers.get('link')||'';

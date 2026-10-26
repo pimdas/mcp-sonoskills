@@ -1,3 +1,4 @@
+import {financialOverview} from './finance.mjs';
 import {orderIndex,orderPlaces,sellingOrder} from './orders.mjs';
 import {workspaceIndex,workspaceInfo} from './workspaces.mjs';
 export function analyze(data, filters={}, config={}) {
@@ -37,9 +38,7 @@ export function analyze(data, filters={}, config={}) {
   const active=enrollments.filter(e=>['confirmed','active','completed'].includes(e.status));
   const linkedOrders=[...linked.values()].filter(link=>link.editionIds.size===1&&ids.has([...link.editionIds][0])&&(!booking||inPeriod(link.order.created_at))).map(link=>link.order);
   const orders=linkedOrders.filter(sellingOrder);
-  const filteredOrderIds=new Set(linkedOrders.map(o=>o.id));
   const externalEditionIds=new Set(all.filter(e=>index.classify(courses.get(e.course_id))==='external').map(e=>e.id));
-  const externalOrderIds=new Set([...linked.values()].filter(link=>[...link.editionIds].some(id=>externalEditionIds.has(id))).map(link=>link.order.id));
   const orderSummary=list=>({orders:list.length,requestedOrders:list.filter(o=>o.status==='requested').length,bookedPlaces:list.reduce((s,o)=>s+(orderPlaces(o)??0),0),unknownPlaces:list.filter(o=>orderPlaces(o)===null).length});
   const sales=orderSummary(orders);
   const orderWarnings=[];
@@ -48,23 +47,8 @@ export function analyze(data, filters={}, config={}) {
   const unmapped=[...linked.values()].filter(link=>sellingOrder(link.order)&&(link.editionIds.size===0||[...link.editionIds].some(id=>!allEditionMap.has(id))));
   if(unmapped.length)orderWarnings.push(`${unmapped.length} orders in de import hebben nog geen herkenbare editie. Synchroniseer om de cataloguskoppelingen bij te werken.`);
   if(sales.unknownPlaces)orderWarnings.push(`Bij ${sales.unknownPlaces} orders ontbreekt het aantal plaatsen. Deze orders tellen mee; hun bezetting is nog onbekend.`);
-  const invoices=(external?[]:(data.invoices||[])).filter(i=>filteredOrderIds.has(i.order_id)&&!externalOrderIds.has(i.order_id)&&i.status!=='concept');
-  const totals={};
-  for(const i of invoices) {
-    const currency=i.currency||'ONBEKEND';
-    const t=totals[currency]??={invoiced:0,open:0,orderValue:0};
-    t.invoiced+=Math.round(Number(i.total_excl||0)*100);
-    t.open+=Math.round(Number(i.total_open||0)*100);
-  }
-  if(!external)for(const o of orders){
-    const edition=allEditionMap.get([...linked.get(o.id).editionIds][0]);
-    const invoiceCurrencies=[...new Set(invoices.filter(i=>i.order_id===o.id).map(i=>i.currency).filter(Boolean))];
-    const currency=o.currency||edition?.currency||(invoiceCurrencies.length===1?invoiceCurrencies[0]:'ONBEKEND');
-    const amount=o.total_cost_incl??o.total_cost_excl;
-    if(amount==null||!Number.isFinite(Number(amount)))continue;
-    const t=totals[currency]??={invoiced:0,open:0,orderValue:0};t.orderValue+=Math.round(Number(amount)*100);
-  }
-  for(const t of Object.values(totals)){t.invoiced/=100;t.open/=100;t.orderValue/=100;}
+  const finance=financialOverview(data,{ids,external,externalIds:externalEditionIds,booking,inPeriod});
+  const totals=finance.totals;
   const history=new Map();
   for(const e of data.enrollments||[]) if(['confirmed','active','completed'].includes(e.status)) {
     const set=history.get(e.student_id)||new Set();set.add(e.planned_course_id);history.set(e.student_id,set);
@@ -105,7 +89,7 @@ export function analyze(data, filters={}, config={}) {
   const availableLocations=new Set(workspaceEditions.map(e=>e.course_location_id));
   const relevantCategoryIds=new Set(matchingCourses.flatMap(c=>index.ancestry(c.category_id).map(c=>c.id)));
   const unassigned=[...courses.values()].filter(c=>index.classify(c)==='other').length;
-  return {workspace,sort,orderWarnings,periodBasis:booking?'booking':'course',financeEnabled:!external,unassigned,workspaceMapping:index.definitions,unknownTypes:workspaceEditions.filter(e=>kind(e)==='unknown').length,rows,templates,totals,months,metrics:{...sales,confirmedEditions:rows.filter(r=>r.confirmed).length,templates:templates.length,editions:rows.length,enrollments:active.length,cancelled:enrollments.filter(e=>e.status==='canceled').length,students:students.size,returning:[...students].filter(id=>history.get(id)?.size>1).length,occupancy:capacity&&!usable.some(r=>r.unknownPlaces)?Math.round(usable.reduce((s,r)=>s+r.bookedPlaces,0)/capacity*100):null},options:{courses:availableCourses.map(c=>({id:c.id,name:c.name||c.title||String(c.id)})),categories:[...categories.values()].filter(c=>relevantCategoryIds.has(c.id)).map(c=>({id:c.id,name:categoryPath(c.id)})).sort((a,b)=>a.name.localeCompare(b.name)),locations:[...locations].filter(([id])=>availableLocations.has(id)).map(([id,name])=>({id,name}))}};
+  return {workspace,sort,orderWarnings,finance,periodBasis:booking?'booking':'course',financeEnabled:!external,unassigned,workspaceMapping:index.definitions,unknownTypes:workspaceEditions.filter(e=>kind(e)==='unknown').length,rows,templates,totals,months,metrics:{...sales,confirmedEditions:rows.filter(r=>r.confirmed).length,templates:templates.length,editions:rows.length,enrollments:active.length,cancelled:enrollments.filter(e=>e.status==='canceled').length,students:students.size,returning:[...students].filter(id=>history.get(id)?.size>1).length,occupancy:capacity&&!usable.some(r=>r.unknownPlaces)?Math.round(usable.reduce((s,r)=>s+r.bookedPlaces,0)/capacity*100):null},options:{courses:availableCourses.map(c=>({id:c.id,name:c.name||c.title||String(c.id)})),categories:[...categories.values()].filter(c=>relevantCategoryIds.has(c.id)).map(c=>({id:c.id,name:categoryPath(c.id)})).sort((a,b)=>a.name.localeCompare(b.name)),locations:[...locations].filter(([id])=>availableLocations.has(id)).map(([id,name])=>({id,name}))}};
 }
 export function csv(rows) {
   const quote=v=>'"'+String(v??'').replace(/^[=+@\-\t\r]/,"'$&").replaceAll('"','""')+'"';

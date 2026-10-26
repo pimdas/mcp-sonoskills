@@ -97,4 +97,13 @@ Een inschrijving is binnen de SonoSkills-workflow het bevestigingssignaal dat ee
 
 Geboekte plaatsen komt uit `number_of_students`, met het aantal order-items als terugval wanneer dit aantal ontbreekt. Eén order kan meerdere plaatsen boeken. Ontbrekende aantallen worden niet als één deelnemer verondersteld; de bezetting blijft dan onbekend. Boekingsbezetting is geboekte plaatsen / bekende capaciteit van niet-geannuleerde vaste edities. Het maanddiagram telt orders op boekingsdatum. Hands-on en Live blijven op cursusdatum gefilterd; online verkoop op boekingsdatum.
 
-Orderwaarde is de waarde van actieve/aangevraagde orders. Gefactureerd en Openstaand blijven factuurgegevens. Geen van deze waarden wordt als ontvangen omzet verondersteld: royalties blijven uitsluitend op betaalde betaalrecords gebaseerd. Na deze update is een synchronisatie nodig voor catalogusvariantkoppelingen en aantallen per order.
+Het financiële hoofdscherm toont alleen Totale omzet (de som van definitieve facturen na creditnota’s) en Openstaand (het nog te betalen deel van dezelfde facturen). Openstaand is onderdeel van Totale omzet en wordt daar niet bovenop geteld. Orderwaarde is niet langer een financiële indicator in het hoofdscherm. Royalties blijven uitsluitend op betaalde betaalrecords gebaseerd. Na deze update is een synchronisatie nodig voor catalogusvariantkoppelingen en aantallen per order.
+
+
+## Financieel overzicht en factuurkoppelingen
+
+Totale omzet wordt uitsluitend opgebouwd uit facturen; conceptfacturen tellen niet mee. Negatieve facturen/creditnota’s verlagen de omzet. Het openstaande bedrag is het saldo van diezelfde facturen. Het dashboard toont geen aparte orderwaarde of ontvangen bedrag in het hoofdscherm.
+
+Facturen worden via hun order gekoppeld aan de editie, of rechtstreeks via `invoice_items.catalog_variant_id`. Zo kunnen handmatige facturen zonder orderkoppeling worden meegenomen als de factuurregel een herkenbare cursusvariant bevat. Bij meerdere edities moet de volledige factuur binnen de selectie passen; er wordt niet naar rato geschat verdeeld. Een factuur wordt maximaal één keer geteld. Externe cursussen blijven uitgesloten.
+
+Ontbrekende, onvolledige en deels buiten de selectie vallende factuurkoppelingen worden in een uitklapbaar overzicht vermeld met factuurnummer, factuurdatum, bedrag, openstaand bedrag en reden. Ze tellen niet mee in de getoonde omzet. De lijst met niet toegerekende facturen gebruikt de gekozen periode op factuurdatum, omdat de cursusdatum niet altijd vast te stellen is. Voor een online handmatige factuur zonder order wordt de factuurdatum gebruikt als boekingsdatum. De nieuwe factuurregelreferenties komen beschikbaar na synchronisatie.

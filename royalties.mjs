@@ -1,4 +1,4 @@
-import {orderIndex} from './orders.mjs';
+import {invoiceIndex} from './finance.mjs';
 import {workspaceIndex} from './workspaces.mjs';
 import {randomUUID} from 'node:crypto';
 export class InputError extends Error {}
@@ -12,14 +12,12 @@ export function templateOptions(data,config={}){const index=workspaceIndex(data,
 // Only a uniquely linked template is eligible; never split a bundle by participant count.
 export function invoiceTargets(data){
  const editions=new Map((data.planned_courses||[]).map(e=>[e.id,e]));
- const byOrder=new Map();for(const e of data.enrollments||[]){if(!byOrder.has(e.order_id))byOrder.set(e.order_id,new Set());byOrder.get(e.order_id).add(e.planned_course_id);}
- const links=orderIndex(data);
- return (data.invoices||[]).map(invoice=>{
-  const ids=new Set(links.get(invoice.order_id)?.editionIds||byOrder.get(invoice.order_id)||[]);
-  const linked=[...ids].map(id=>editions.get(id)).filter(Boolean),templates=new Set(linked.map(e=>e.course_id));
-  return {invoice,courseId:templates.size===1?[...templates][0]:null,editionIds:[...ids],courseIds:[...templates],ambiguous:templates.size!==1||linked.length!==ids.size};
+ return invoiceIndex(data).map(({invoice,editionIds,unresolved})=>{
+  const ids=[...editionIds],templates=new Set(ids.map(id=>editions.get(id)?.course_id).filter(id=>id!=null));
+  return {invoice,courseId:templates.size===1&&!unresolved?[...templates][0]:null,editionIds:ids,courseIds:[...templates],ambiguous:unresolved||templates.size!==1};
  });
 }
+
 export function saveAgreement(state,input,data,config={}){
  const id=input.id||randomUUID(),old=state.agreements.find(a=>a.id===id);
  if(input.id&&!old)fail('Afspraak niet gevonden.');
