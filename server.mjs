@@ -1,4 +1,5 @@
 import http from 'node:http';
+import {dashboard} from './dashboard.mjs';
 import {readFile} from 'node:fs/promises';
 import {randomBytes,createHmac,timingSafeEqual,scryptSync} from 'node:crypto';
 import {database} from './db.mjs';
@@ -104,10 +105,11 @@ const server=http.createServer(async(req,res)=>{
       }
       return send(404,{error:'Niet gevonden'});
     }
-    if(['/api/analytics','/api/export','/api/finance-export'].includes(url.pathname) && req.method==='GET') {
+    if(['/api/dashboard','/api/analytics','/api/export','/api/finance-export'].includes(url.pathname) && req.method==='GET') {
       const filters=Object.fromEntries(url.searchParams);
       for(const k of ['from','to']) if(filters[k]&&!/^\d{4}-\d{2}-\d{2}$/.test(filters[k]))return send(400,{error:'Ongeldige datum'});
       if(filters.from && filters.to && filters.from>filters.to)return send(400,{error:'De einddatum ligt vóór de begindatum.'});
+      if(url.pathname==='/api/dashboard')return send(200,dashboard(snapshot.data,filters,workspaceConfig));
       const result=analyze(snapshot.data,filters,workspaceConfig);
       if(url.pathname==='/api/finance-export'){res.setHeader('Content-Disposition','attachment; filename="sonoskills-omzetcontrole.csv"');return send(200,financeCsv(result.finance,filters,snapshot.syncedAt),'text/csv; charset=utf-8');}
       if(url.pathname==='/api/export'){res.setHeader('Content-Disposition','attachment; filename="sonoskills-cursussen.csv"');return send(200,csv(result.rows),'text/csv; charset=utf-8');}
