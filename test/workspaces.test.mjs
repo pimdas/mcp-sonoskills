@@ -19,3 +19,12 @@ test('SonoClasses roots include templates at every descendant depth, including s
  assert.deepEqual(on.templates.map(t=>t.id).sort((a,b)=>a-b),[3,40]);assert.deepEqual(live.templates.map(t=>t.id).sort((a,b)=>a-b),[4,50]);assert.ok(on.rows.some(r=>r.id===400));assert.ok(live.rows.some(r=>r.id===500));
  assert.equal(analyze(d,{workspace:'ondemand',category:'4'},config).templates.length,2);
 });
+test('SonoClasses split fixed and flexible editions regardless of which SonoClass category holds the template',()=>{
+ for(const category_id of [4,5]){
+  const d=fixture();d.courses=[{id:3,name:'Mixed SonoClass',category_id}];d.planned_courses=[{id:31,course_id:3,type:'FixedPlannedCourse',start_date:'2026-10-20'},{id:32,course_id:3,type:'FlexiblePlannedCourse'}];
+  d.orders=[{id:31,planned_course_id:31,status:'active',created_at:'2026-09-01',currency:'EUR',total_cost_incl:170},{id:32,planned_course_id:32,status:'active',created_at:'2026-10-25',currency:'EUR',total_cost_incl:20}];
+  d.enrollments=[{id:1,order_id:31,planned_course_id:31,status:'active'},{id:2,order_id:32,planned_course_id:32,status:'active'}];d.invoices=d.orders.map(o=>({id:o.id,order_id:o.id,status:'paid',currency:'EUR',total_incl:o.total_cost_incl,total_open:0}));
+  const live=analyze(d,{workspace:'live',from:'2026-10-01',to:'2026-10-31'}),on=analyze(d,{workspace:'ondemand',from:'2026-10-01',to:'2026-10-31'});
+  assert.deepEqual(live.rows.map(r=>r.id),[31]);assert.deepEqual(on.rows.map(r=>r.id),[32]);assert.equal(live.templates[0].id,on.templates[0].id);assert.equal(live.metrics.enrollments,1);assert.equal(on.metrics.enrollments,1);assert.equal(live.totals.EUR.invoiced,170);assert.equal(on.totals.EUR.invoiced,20);assert.equal(analyze(d).rows.length,2);
+ }
+});

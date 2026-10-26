@@ -26,9 +26,10 @@ export function analyze(data, filters={}, config={}) {
   const all=data.planned_courses||[];
   const kind=e=>e.type==='FixedPlannedCourse'?'fixed':e.type==='FlexiblePlannedCourse'?'flexible':'unknown';
   const inPeriod=date=>(!filters.from || (date && date.slice(0,10)>=filters.from)) && (!filters.to || (date && date.slice(0,10)<=filters.to));
-  const matchingCourses=[...courses.values()].filter(c=>workspace==='all'?index.classify(c)!=='external':index.classify(c)===workspace);
+  const editionWorkspace=e=>index.classifyEdition(e,courses.get(e.course_id));
+  const matchingCourses=[...courses.values()].filter(c=>{const own=all.filter(e=>e.course_id===c.id);return workspace==='all'?index.classify(c)!=='external':own.length?own.some(e=>editionWorkspace(e)===workspace):index.classify(c)===workspace;});
   const matchingIds=new Set(matchingCourses.map(c=>c.id));
-  const workspaceEditions=all.filter(e=>matchingIds.has(e.course_id));
+  const workspaceEditions=all.filter(e=>matchingIds.has(e.course_id)&&(workspace==='all'||editionWorkspace(e)===workspace));
   const editions=workspaceEditions.filter(x=>(booking||inPeriod(x.start_date)) && (!filters.course || String(x.course_id)===filters.course) && (!filters.location || String(x.course_location_id)===filters.location) && inCategory(courses.get(x.course_id)?.category_id));
   const allOrders=new Map((data.orders||[]).map(o=>[o.id,o]));
   const linked=orderIndex(data);
@@ -57,7 +58,7 @@ export function analyze(data, filters={}, config={}) {
   const rows=editions.map(e=> {
     const participants=active.filter(a=>a.planned_course_id===e.id).length;
     const sale=orderSummary(orders.filter(o=>linked.get(o.id).editionIds.has(e.id)));
-    return {id:e.id,...sale,workspace:index.classify(courses.get(e.course_id)),end:e.end_date||'',variantId:e.course_variant_id??null,variant:variants.get(e.course_variant_id)||(e.course_variant_id?`Variant #${e.course_variant_id}`:'—'),courseId:e.course_id,code:courses.get(e.course_id)?.code||'',categoryId:courses.get(e.course_id)?.category_id??null,category:categoryPath(courses.get(e.course_id)?.category_id),type:kind(e),name:courses.get(e.course_id)?.name||courses.get(e.course_id)?.title||`Cursus ${e.course_id}`,location:locations.get(e.course_location_id)||'Onbekend',start:e.start_date||'',status:e.status,confirmed:participants>0&&e.status!=='canceled',participants,capacity:e.max_participants||null,occupancy:kind(e)!=='flexible' && e.max_participants&&!sale.unknownPlaces?Math.round(sale.bookedPlaces/e.max_participants*100):null};
+    return {id:e.id,...sale,workspace:editionWorkspace(e),end:e.end_date||'',variantId:e.course_variant_id??null,variant:variants.get(e.course_variant_id)||(e.course_variant_id?`Variant #${e.course_variant_id}`:'—'),courseId:e.course_id,code:courses.get(e.course_id)?.code||'',categoryId:courses.get(e.course_id)?.category_id??null,category:categoryPath(courses.get(e.course_id)?.category_id),type:kind(e),name:courses.get(e.course_id)?.name||courses.get(e.course_id)?.title||`Cursus ${e.course_id}`,location:locations.get(e.course_location_id)||'Onbekend',start:e.start_date||'',status:e.status,confirmed:participants>0&&e.status!=='canceled',participants,capacity:e.max_participants||null,occupancy:kind(e)!=='flexible' && e.max_participants&&!sale.unknownPlaces?Math.round(sale.bookedPlaces/e.max_participants*100):null};
   }).sort((a,b)=>a.start.localeCompare(b.start));
   const usable=rows.filter(r=>r.capacity && r.type!=='flexible' && r.status!=='canceled');
   const capacity=usable.reduce((s,r)=>s+r.capacity,0);
@@ -81,7 +82,7 @@ export function analyze(data, filters={}, config={}) {
     const known=editions.filter(e=>e.type!=='flexible' && e.capacity && e.status!=='canceled');
     const capacity=known.reduce((s,e)=>s+e.capacity,0);
     const sale=orderSummary(orders.filter(o=>editions.some(e=>linked.get(o.id).editionIds.has(e.id))));
-    return {id,...sale,workspace:index.classify(c),name:first.name,code:first.code,category:first.category,categoryId:first.categoryId,editions,participants:editions.reduce((s,e)=>s+e.participants,0),occupancy:capacity&&!known.some(e=>e.unknownPlaces)?Math.round(known.reduce((s,e)=>s+e.bookedPlaces,0)/capacity*100):null};
+    return {id,...sale,workspace:workspace==='all'?index.classify(c):workspace,name:first.name,code:first.code,category:first.category,categoryId:first.categoryId,editions,participants:editions.reduce((s,e)=>s+e.participants,0),occupancy:capacity&&!known.some(e=>e.unknownPlaces)?Math.round(known.reduce((s,e)=>s+e.bookedPlaces,0)/capacity*100):null};
   });
   const firstEdition=t=>[...t.editions].sort(byDate)[0]||{id:t.id,start:'',type:'unknown'};
   templates.sort((a,b)=>sort==='upcoming'?byDate(firstEdition(a),firstEdition(b))||byName(a,b):compare(a,b));

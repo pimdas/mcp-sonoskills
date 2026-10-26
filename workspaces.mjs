@@ -12,8 +12,9 @@ export function workspaceIndex(data,config={}){
  function ancestry(id){const result=[],seen=new Set();while(categories.has(id)&&!seen.has(id)){seen.add(id);const c=categories.get(id);result.push(c);id=c.parent_id;}return result;}
  const mapping=Object.fromEntries(definitions.map(d=>[d.id,config[d.id]?.length?config[d.id]:(data.categories||[]).filter(c=>d.aliases.map(normalize).includes(normalize(c.name))).map(c=>c.id)]));
  function classify(course){const parents=ancestry(course?.category_id);for(const id of ['external','products'])if(parents.some(c=>mapping[id].includes(c.id)))return id;for(const c of parents)for(const d of definitions)if(mapping[d.id].includes(c.id))return d.id;return 'other';}
+ function classifyEdition(edition,course){const base=classify(course);if(['live','ondemand'].includes(base)){if(edition.type==='FixedPlannedCourse')return 'live';if(edition.type==='FlexiblePlannedCourse')return 'ondemand';}return base;}
  const path=id=>ancestry(id).reverse().map(c=>c.name).join(' / ')||'Zonder categorie';
- return {mapping,classify,path,ancestry,definitions:definitions.map(d=>({id:d.id,name:d.name,basis:d.basis,categoryIds:mapping[d.id],automatic:!config[d.id]?.length})),categories:[...categories.values()].map(c=>({id:c.id,name:path(c.id)})).sort((a,b)=>a.name.localeCompare(b.name))};
+ return {mapping,classify,classifyEdition,path,ancestry,definitions:definitions.map(d=>({id:d.id,name:d.name,basis:d.basis,categoryIds:mapping[d.id],automatic:!config[d.id]?.length})),categories:[...categories.values()].map(c=>({id:c.id,name:path(c.id)})).sort((a,b)=>a.name.localeCompare(b.name))};
 }
 export function workspaceInfo(id){return definitions.find(d=>d.id===id);}
 export function validateMapping(mapping,data){
