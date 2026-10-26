@@ -27,7 +27,7 @@ async function load(){
   const missing=d.workspaceMapping.filter(w=>!w.categoryIds.length).map(w=>w.name);$('#migration-note').hidden=!missing.length;$('#migration-note').textContent=missing.length?'Nog geen categorie gekoppeld voor: '+missing.join(', ')+'. Controleer de indeling onder Databronnen.':'';$('#other-workspace').hidden=!d.unassigned;$('#finance-panel').hidden=!d.financeEnabled;
   for(const key of ['category','course','location']){
     const select=$(`[name=${key}]`),selected=pendingFilters[key]??select.value;
-    select.replaceChildren(element('option',{category:'Alle categorieën',course:'Alle templates',location:'Alle locaties'}[key]));select.firstChild.value='';
+    select.replaceChildren(element('option',{category:'Alle categorieën',course:'Alle cursussen',location:'Alle locaties'}[key]));select.firstChild.value='';
     if(key==='category'){const option=element('option','Zonder categorie');option.value='none';select.append(option);}
     for(const item of d.options[{category:'categories',course:'courses',location:'locations'}[key]]){const option=element('option',item.name);option.value=item.id;select.append(option);}select.value=selected;
   }
@@ -65,6 +65,9 @@ $('#filters').onsubmit=async e=>{e.preventDefault();try{await load();saveFilterU
 $('#filters').onreset=()=>setTimeout(()=>{load().then(saveFilterUrl).catch(e=>$('#message').textContent=e.message);},0);
 $('#export').onclick=()=>{if(!$('#filters').reportValidity())return;window.location.href='/api/export?'+params();};
 function showWorkspace(){
+  const online=['elearning','ondemand','live'].includes(workspace);
+  for(const key of ['category','location']){const select=$('#filters').elements[key];$('#'+key+'-filter').hidden=online;select.disabled=online;if(online){select.value='';delete pendingFilters[key];}}
+
   $('#analysis-filters').hidden=page!=='analytics';
   $('#overview').hidden=page!=='analytics';$('#connections').hidden=page!=='sources';$('#royalties').hidden=page!=='royalties';
   const info={royalties:['Royalties','Afspraken en afrekeningen over ontvangen eLearning-omzet.'],all:['Overzicht','Eigen templates en edities; externe cursussen staan apart.'],handson:['Hands-on cursussen','Templates en edities uit de categorie Hands-on, met cursusdata en locaties.'],elearning:['Online · eLearning','Alle templates en toegangsduurvarianten uit de categorie eLearning.'],ondemand:['Online · On-demand SonoClasses','Templates en edities uit de categorie On-demand SonoClasses.'],live:['Online · Live SonoClasses','Live online cursussen en hun geplande edities.'],products:['Producten','Alle templates uit de categorie Producten.'],external:['Extern','Partnercursussen voor planning, cursusedata en locaties; zonder omzetoverzicht.'],other:['Overige templates','Templates die nog niet aan een werkruimte zijn gekoppeld.']}[workspace];
