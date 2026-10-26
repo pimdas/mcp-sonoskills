@@ -4,8 +4,8 @@ const routePaths={all:'/overview',handson:'/handson',elearning:'/online/elearnin
 let page='analytics',workspace='all',pendingFilters={};
 function readRoute(){
  const url=new URL(location.href);
- if(url.hash==='#connections'){url.pathname='/data-sources';url.hash='';history.replaceState({},'',url);}else if(url.hash==='#courses'){url.pathname='/courses';url.hash='';history.replaceState({},'',url);}
- page=url.pathname==='/courses'?'courses':url.pathname==='/data-sources'?'sources':url.pathname==='/royalties'?'royalties':'analytics';
+ if(url.hash==='#connections'){url.pathname='/data-sources';url.hash='';history.replaceState({},'',url);}else if(url.hash==='#courses'){url.pathname=routePaths[normalizeWorkspace(url.searchParams.get('workspace')||'all')];url.hash='';history.replaceState({},'',url);}
+ page=url.pathname==='/data-sources'?'sources':url.pathname==='/royalties'?'royalties':'analytics';
  workspace=normalizeWorkspace(page==='analytics'?(Object.entries(routePaths).find(([,path])=>path===url.pathname)?.[0]||url.searchParams.get('workspace')||'all'):page==='royalties'?'royalties':url.searchParams.get('workspace')||'all');
  pendingFilters=Object.fromEntries(url.searchParams);
 }
@@ -33,7 +33,7 @@ async function load(){
   }
   pendingFilters={};
   const labels={active:'Actief',completed:'Afgerond',planned:'Gepland',canceled:'Geannuleerd'};
-  const listing=page==='analytics'?$('#workspace-template-groups'):$('#template-groups');listing.replaceChildren();
+  const listing=$('#workspace-template-groups');listing.replaceChildren();
   for(const template of d.templates){
     const details=element('details','','template-card');details.open=opened.has(template.id);
     details.addEventListener('toggle',()=>details.open?opened.add(template.id):opened.delete(template.id));
@@ -56,8 +56,7 @@ async function load(){
   $('#chart').replaceChildren();const months=Object.entries(d.months).sort(([a],[b])=>a.localeCompare(b));const max=Math.max(1,...months.map(([,v])=>v));for(const [month,count] of months){const wrap=element('div','','bar-wrap'),bar=element('progress','','bar');bar.max=max;bar.value=count;bar.title=`${month}: ${count} inschrijvingen`;wrap.append(element('span',String(count)),bar,element('span',month));$('#chart').append(wrap);}
   if(!months.length)$('#chart').append(element('p','Nog geen inschrijvingen om te tonen.'));
 }
-function saveFilterUrl(){if(!['analytics','courses'].includes(page))return;const url=new URL(location.href);url.search='';for(const [k,v] of params())url.searchParams.set(k,v);url.searchParams.set('period',$('#filters [data-period-preset]').value);history.replaceState({},'',url);}
-function courseUrl(){const p=params();if(workspace==='royalties')p.set('workspace','elearning');p.set('period',$('#filters [data-period-preset]').value);return '/courses?'+p;}
+function saveFilterUrl(){if(page!=='analytics')return;const url=new URL(location.href);url.search='';for(const [k,v] of params())url.searchParams.set(k,v);url.searchParams.set('period',$('#filters [data-period-preset]').value);history.replaceState({},'',url);}
 async function refresh(){status=await api('/api/status');$('#login').hidden=true;$('#dashboard').hidden=false;$('#empty').hidden=!!status.syncedAt;$('#sync').disabled=status.syncing||!status.configured;$('#sync').textContent=status.syncing?'Synchroniseren…':'↻ Synchroniseren';$('#source-status').textContent=status.syncing?'Gegevens worden opgehaald…':status.error?'Synchronisatie mislukt':status.configured?'API-key ingesteld':'API-key nog niet ingesteld';$('#source-badge').textContent=status.syncedAt?'Verbonden':status.configured?'Gereed voor import':'Niet gekoppeld';$('#message').textContent=status.error||'';$('#last-sync').textContent=status.syncedAt?'Laatste succesvolle synchronisatie: '+new Date(status.syncedAt).toLocaleString('nl-NL'):'Nog geen synchronisatie uitgevoerd';if(lastSync!==status.syncedAt){lastSync=status.syncedAt;await load();}}
 $('#login-form').addEventListener('submit',async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;try{await api('/api/login',{email:$('#email').value,password:$('#password').value});$('#password').value='';$('#login-error').textContent='';await refresh();await load();}catch(err){$('#login-error').textContent=err.message;}finally{b.disabled=false;}});
 $('#logout').onclick=async()=>{await api('/api/logout',{});showLogin();};
@@ -66,11 +65,10 @@ $('#filters').onsubmit=async e=>{e.preventDefault();try{await load();saveFilterU
 $('#filters').onreset=()=>setTimeout(()=>{load().then(saveFilterUrl).catch(e=>$('#message').textContent=e.message);},0);
 $('#export').onclick=()=>{if(!$('#filters').reportValidity())return;window.location.href='/api/export?'+params();};
 function showWorkspace(){
-  $('#analysis-filters').hidden=!['analytics','courses'].includes(page);
-  $('#overview').hidden=page!=='analytics';$('#courses').hidden=page!=='courses';$('#connections').hidden=page!=='sources';$('#royalties').hidden=page!=='royalties';
-  $('#course-workspace-filter').hidden=page!=='courses';$('#course-workspace').value=workspace;
+  $('#analysis-filters').hidden=page!=='analytics';
+  $('#overview').hidden=page!=='analytics';$('#connections').hidden=page!=='sources';$('#royalties').hidden=page!=='royalties';
   const info={royalties:['Royalties','Afspraken en afrekeningen over ontvangen eLearning-omzet.'],all:['Overzicht','Eigen templates en edities; externe cursussen staan apart.'],handson:['Hands-on cursussen','Templates en edities uit de categorie Hands-on, met cursusdata en locaties.'],elearning:['Online · eLearning','Alle templates en toegangsduurvarianten uit de categorie eLearning.'],ondemand:['Online · On-demand SonoClasses','Templates en edities uit de categorie On-demand SonoClasses.'],live:['Online · Live SonoClasses','Live online cursussen en hun geplande edities.'],products:['Producten','Alle templates uit de categorie Producten.'],external:['Extern','Partnercursussen voor planning, cursusedata en locaties; zonder omzetoverzicht.'],other:['Overige templates','Templates die nog niet aan een werkruimte zijn gekoppeld.']}[workspace];
-  $('#workspace-title').textContent=page==='sources'?'Databronnen':page==='courses'?'Cursussen':info[0];$('#workspace-description').textContent=page==='sources'?'Eduframe-koppeling en categorie-indeling beheren.':page==='courses'?'Templates, varianten en edities binnen je selectie.':info[1];
+  $('#workspace-title').textContent=page==='sources'?'Databronnen':info[0];$('#workspace-description').textContent=page==='sources'?'Eduframe-koppeling en categorie-indeling beheren.':info[1];
   $('#from-label').textContent=bookingWorkspace()?'Geboekt vanaf':'Cursus start vanaf';
   $('#third-label').textContent=bookingWorkspace()?'Unieke deelnemers':'Gemiddelde bezetting';
   $('#third-description').textContent=bookingWorkspace()?'Binnen de gekozen boekingsperiode':'Gewogen naar capaciteit';
@@ -91,9 +89,7 @@ function restorePeriod(){
  $('#filters').updatePeriod();
 }
 for(const b of document.querySelectorAll('[data-workspace]')){b.href=routePaths[b.dataset.workspace];b.onclick=e=>{if(e.ctrlKey||e.metaKey||e.shiftKey||e.altKey)return;e.preventDefault();navigate(routePaths[b.dataset.workspace]);};}
-for(const a of document.querySelectorAll('[data-page]'))a.onclick=e=>{if(e.ctrlKey||e.metaKey||e.shiftKey||e.altKey)return;e.preventDefault();navigate(a.dataset.page==='courses'?courseUrl():'/data-sources');};
-$('#view-courses').onclick=e=>{if(e.ctrlKey||e.metaKey||e.shiftKey||e.altKey){e.currentTarget.href=courseUrl();return;}e.preventDefault();navigate(courseUrl());};
-$('#course-workspace').onchange=()=>{workspace=normalizeWorkspace($('#course-workspace').value);for(const key of ['category','course','location'])$('#filters').elements[key].value='';pendingFilters={};showWorkspace();load().then(saveFilterUrl).catch(e=>$('#message').textContent=e.message);};
+for(const a of document.querySelectorAll('[data-page]'))a.onclick=e=>{if(e.ctrlKey||e.metaKey||e.shiftKey||e.altKey)return;e.preventDefault();navigate('/data-sources');};
 window.addEventListener('popstate',()=>{readRoute();restorePeriod();showWorkspace();window.scrollTo(0,0);load().catch(e=>$('#message').textContent=e.message);});
 $('#filters').elements.sort.onchange=()=>{if($('#filters').reportValidity())$('#filters').requestSubmit();};
 $('#filters').elements.category.onchange=()=>{$('#filters').elements.course.value='';};
