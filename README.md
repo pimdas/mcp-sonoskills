@@ -82,3 +82,8 @@ Onder Databronnen → Werkruimtes koppelen aan Eduframe-categorieën kun je voor
 Externe cursussen tonen templates, edities, data, locaties en inschrijvingen. Hun financiële overzicht wordt verborgen en hun facturen tellen niet mee in het eigen overzicht. De toepassing blijft uitsluitend lezen uit Eduframe; planning en cursusgegevens worden niet teruggeschreven.
 
 Royalties en de betalingsimport zijn beperkt tot templates die aan de eLearning-werkruimte zijn toegewezen. Na een gewijzigde indeling is opnieuw synchroniseren nodig voordat afrekeningen kunnen worden vastgesteld. Reeds vastgestelde afrekeningen blijven bewaard. De mapping, automatische categorieherkenning, uitsluiting van externe omzet en royaltyselectie zijn gedekt door tests.
+
+
+## Pagina’s
+
+Analysewerkruimtes hebben eigen routes: `/overview`, `/handson`, `/online/elearning`, `/online/on-demand`, `/online/live`, `/products`, `/external` en `/other`. De cursuslijst staat op `/courses`, royalties op `/royalties` en de koppelingen/instellingen op `/data-sources`. Alleen de gekozen pagina wordt getoond; de cursuslijst en databronnen staan niet meer onder elke analyse. Via Bekijk cursussen in deze selectie worden werkruimte en filters meegenomen naar de cursuspagina. Datum-, categorie-, template- en locatiefilters worden in de URL van analyse- en cursuspagina’s bewaard. Direct openen, verversen en browsernavigatie worden ondersteund. Oude hashlinks naar Cursussen en Databronnen worden omgezet naar de eigen route.

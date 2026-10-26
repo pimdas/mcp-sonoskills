@@ -1,7 +1,15 @@
 const $=s=>document.querySelector(s);
 let status, lastSync=null;
-let workspace=new URL(location.href).searchParams.get('workspace')||'all';
-workspace=normalizeWorkspace(workspace);
+const routePaths={all:'/overview',handson:'/handson',elearning:'/online/elearning',ondemand:'/online/on-demand',live:'/online/live',products:'/products',external:'/external',other:'/other',royalties:'/royalties'};
+let page='analytics',workspace='all',pendingFilters={};
+function readRoute(){
+ const url=new URL(location.href);
+ if(url.hash==='#connections'){url.pathname='/data-sources';url.hash='';history.replaceState({},'',url);}else if(url.hash==='#courses'){url.pathname='/courses';url.hash='';history.replaceState({},'',url);}
+ page=url.pathname==='/courses'?'courses':url.pathname==='/data-sources'?'sources':url.pathname==='/royalties'?'royalties':'analytics';
+ workspace=normalizeWorkspace(page==='analytics'?(Object.entries(routePaths).find(([,path])=>path===url.pathname)?.[0]||url.searchParams.get('workspace')||'all'):page==='royalties'?'royalties':url.searchParams.get('workspace')||'all');
+ pendingFilters=Object.fromEntries(url.searchParams);
+}
+readRoute();
 function normalizeWorkspace(value){const key=({fixed:'handson',flexible:'elearning'})[value]||value;return ['all','handson','elearning','ondemand','live','products','external','royalties','other'].includes(key)?key:'all';}
 const bookingWorkspace=()=>['elearning','ondemand','products'].includes(workspace);
 const opened=new Set();
@@ -11,17 +19,19 @@ function showLogin(){$('#login').hidden=false;$('#dashboard').hidden=true;}
 function element(tag,text,className){const el=document.createElement(tag);el.textContent=text;if(className)el.className=className;return el;}
 function params(){return new URLSearchParams([['workspace',workspace],...[...new FormData($('#filters'))].filter(([,v])=>v)]);}
 async function load(){
-  if(workspace==='royalties')return loadRoyalties();
+  if(page==='sources')return loadWorkspaceMapping();
+  if(page==='royalties')return loadRoyalties();
   const d=await api('/api/analytics?'+params());
   for(const key of ['templates','editions','enrollments','returning'])$('#'+key).textContent=status?.syncedAt?d.metrics[key].toLocaleString('nl-NL'):'—';
   $('#occupancy').textContent=bookingWorkspace()?(status?.syncedAt?d.metrics.students.toLocaleString('nl-NL'):'—'):(d.metrics.occupancy==null?'—':d.metrics.occupancy+'%');
   const missing=d.workspaceMapping.filter(w=>!w.categoryIds.length).map(w=>w.name);$('#migration-note').hidden=!missing.length;$('#migration-note').textContent=missing.length?'Nog geen categorie gekoppeld voor: '+missing.join(', ')+'. Controleer de indeling onder Databronnen.':'';$('#other-workspace').hidden=!d.unassigned;$('#finance-panel').hidden=!d.financeEnabled;
   for(const key of ['category','course','location']){
-    const select=$(`[name=${key}]`),selected=select.value;
+    const select=$(`[name=${key}]`),selected=pendingFilters[key]??select.value;
     select.replaceChildren(element('option',{category:'Alle categorieën',course:'Alle templates',location:'Alle locaties'}[key]));select.firstChild.value='';
     if(key==='category'){const option=element('option','Zonder categorie');option.value='none';select.append(option);}
     for(const item of d.options[{category:'categories',course:'courses',location:'locations'}[key]]){const option=element('option',item.name);option.value=item.id;select.append(option);}select.value=selected;
   }
+  pendingFilters={};
   const labels={active:'Actief',completed:'Afgerond',planned:'Gepland',canceled:'Geannuleerd'};
   $('#template-groups').replaceChildren();let previous=null;
   for(const template of d.templates){
@@ -47,32 +57,46 @@ async function load(){
   $('#chart').replaceChildren();const months=Object.entries(d.months).sort(([a],[b])=>a.localeCompare(b));const max=Math.max(1,...months.map(([,v])=>v));for(const [month,count] of months){const wrap=element('div','','bar-wrap'),bar=element('progress','','bar');bar.max=max;bar.value=count;bar.title=`${month}: ${count} inschrijvingen`;wrap.append(element('span',String(count)),bar,element('span',month));$('#chart').append(wrap);}
   if(!months.length)$('#chart').append(element('p','Nog geen inschrijvingen om te tonen.'));
 }
+function saveFilterUrl(){if(!['analytics','courses'].includes(page))return;const url=new URL(location.href);url.search='';for(const [k,v] of params())url.searchParams.set(k,v);url.searchParams.set('period',$('#filters [data-period-preset]').value);history.replaceState({},'',url);}
+function courseUrl(){const p=params();if(workspace==='royalties')p.set('workspace','elearning');p.set('period',$('#filters [data-period-preset]').value);return '/courses?'+p;}
 async function refresh(){status=await api('/api/status');$('#login').hidden=true;$('#dashboard').hidden=false;$('#empty').hidden=!!status.syncedAt;$('#sync').disabled=status.syncing||!status.configured;$('#sync').textContent=status.syncing?'Synchroniseren…':'↻ Synchroniseren';$('#source-status').textContent=status.syncing?'Gegevens worden opgehaald…':status.error?'Synchronisatie mislukt':status.configured?'API-key ingesteld':'API-key nog niet ingesteld';$('#source-badge').textContent=status.syncedAt?'Verbonden':status.configured?'Gereed voor import':'Niet gekoppeld';$('#message').textContent=status.error||'';$('#last-sync').textContent=status.syncedAt?'Laatste succesvolle synchronisatie: '+new Date(status.syncedAt).toLocaleString('nl-NL'):'Nog geen synchronisatie uitgevoerd';if(lastSync!==status.syncedAt){lastSync=status.syncedAt;await load();}}
-$('#login-form').addEventListener('submit',async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;try{await api('/api/login',{email:$('#email').value,password:$('#password').value});$('#password').value='';$('#login-error').textContent='';await refresh();await load();if(!mappingLoaded)await loadWorkspaceMapping();}catch(err){$('#login-error').textContent=err.message;}finally{b.disabled=false;}});
+$('#login-form').addEventListener('submit',async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;try{await api('/api/login',{email:$('#email').value,password:$('#password').value});$('#password').value='';$('#login-error').textContent='';await refresh();await load();}catch(err){$('#login-error').textContent=err.message;}finally{b.disabled=false;}});
 $('#logout').onclick=async()=>{await api('/api/logout',{});showLogin();};
 $('#sync').onclick=async()=>{try{await api('/api/sync',{});await refresh();}catch(e){$('#message').textContent=e.message;}};
-$('#filters').onsubmit=async e=>{e.preventDefault();try{await load();$('#message').textContent='';}catch(err){$('#message').textContent=err.message;}};
-$('#filters').onreset=()=>setTimeout(()=>load().catch(e=>$('#message').textContent=e.message),0);
+$('#filters').onsubmit=async e=>{e.preventDefault();try{await load();saveFilterUrl();$('#message').textContent='';}catch(err){$('#message').textContent=err.message;}};
+$('#filters').onreset=()=>setTimeout(()=>{load().then(saveFilterUrl).catch(e=>$('#message').textContent=e.message);},0);
 $('#export').onclick=()=>{if(!$('#filters').reportValidity())return;window.location.href='/api/export?'+params();};
 function showWorkspace(){
-  for(const id of ['overview','courses'])$('#'+id).hidden=workspace==='royalties';
-  $('#royalties').hidden=workspace!=='royalties';
+  $('#analysis-filters').hidden=!['analytics','courses'].includes(page);
+  $('#overview').hidden=page!=='analytics';$('#courses').hidden=page!=='courses';$('#connections').hidden=page!=='sources';$('#royalties').hidden=page!=='royalties';
+  $('#course-workspace-filter').hidden=page!=='courses';$('#course-workspace').value=workspace;
   const info={royalties:['Royalties','Afspraken en afrekeningen over ontvangen eLearning-omzet.'],all:['Overzicht','Eigen templates en edities; externe cursussen staan apart.'],handson:['Hands-on cursussen','Templates en edities uit de categorie Hands-on, met cursusdata en locaties.'],elearning:['Online · eLearning','Alle templates en toegangsduurvarianten uit de categorie eLearning.'],ondemand:['Online · On-demand SonoClasses','Templates en edities uit de categorie On-demand SonoClasses.'],live:['Online · Live SonoClasses','Live online cursussen en hun geplande edities.'],products:['Producten','Alle templates uit de categorie Producten.'],external:['Extern','Partnercursussen voor planning, cursusedata en locaties; zonder omzetoverzicht.'],other:['Overige templates','Templates die nog niet aan een werkruimte zijn gekoppeld.']}[workspace];
-  $('#workspace-title').textContent=info[0];$('#workspace-description').textContent=info[1];
+  $('#workspace-title').textContent=page==='sources'?'Databronnen':page==='courses'?'Cursussen':info[0];$('#workspace-description').textContent=page==='sources'?'Eduframe-koppeling en categorie-indeling beheren.':page==='courses'?'Templates, varianten en edities binnen je selectie.':info[1];
   $('#from-label').textContent=bookingWorkspace()?'Geboekt vanaf':'Cursus start vanaf';
   $('#third-label').textContent=bookingWorkspace()?'Unieke deelnemers':'Gemiddelde bezetting';
   $('#third-description').textContent=bookingWorkspace()?'Binnen de gekozen boekingsperiode':'Gewogen naar capaciteit';
   $('#period-note').textContent=workspace==='external'?'Externe cursussen worden apart getoond en tellen niet mee in het eigen omzetoverzicht. Periode: startdatum van de editie.':bookingWorkspace()?'Periode: boekingsdatum. Templates en edities blijven zichtbaar; aantallen en facturen horen bij orders uit deze boekingsperiode.':'Periode: startdatum van de editie. Bij een datumselectie vallen edities zonder startdatum buiten de selectie.';
-  for(const b of document.querySelectorAll('[data-workspace]')){b.classList.toggle('selected',b.dataset.workspace===workspace);b.setAttribute('aria-pressed',String(b.dataset.workspace===workspace));}
+  for(const a of document.querySelectorAll('[data-page]')){a.classList.toggle('selected',a.dataset.page===page);if(a.dataset.page===page)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current');}
+  for(const b of document.querySelectorAll('[data-workspace]')){b.classList.toggle('selected',(page==='analytics'||page==='royalties')&&b.dataset.workspace===workspace);b.setAttribute('aria-pressed',String((page==='analytics'||page==='royalties')&&b.dataset.workspace===workspace));}
 }
-for(const b of document.querySelectorAll('[data-workspace]'))b.onclick=async()=>{
-  workspace=b.dataset.workspace;opened.clear();for(const key of ['category','course','location'])$('#filters').elements[key].value='';showWorkspace();
-  const url=new URL(location.href);url.searchParams.set('workspace',workspace);history.pushState({},'',url);
-  try{await load();}catch(e){$('#message').textContent=e.message;}
-};
-window.addEventListener('popstate',()=>{workspace=new URL(location.href).searchParams.get('workspace')||'all';workspace=normalizeWorkspace(workspace);showWorkspace();load().catch(e=>$('#message').textContent=e.message);});
+async function navigate(path){
+ history.pushState({},'',path);readRoute();opened.clear();
+ for(const key of ['category','course','location'])$('#filters').elements[key].value='';
+ restorePeriod();showWorkspace();window.scrollTo(0,0);
+ try{await load();}catch(e){$('#message').textContent=e.message;}
+}
+function restorePeriod(){
+ const select=$('#filters [data-period-preset]');select.value=['month','quarter','year','custom'].includes(pendingFilters.period)?pendingFilters.period:(pendingFilters.from||pendingFilters.to?'custom':'year');
+ if(select.value==='custom'){for(const key of ['from','to'])$('#filters').elements[key].value=pendingFilters[key]||'';}
+ $('#filters').updatePeriod();
+}
+for(const b of document.querySelectorAll('[data-workspace]')){b.href=routePaths[b.dataset.workspace];b.onclick=e=>{if(e.ctrlKey||e.metaKey||e.shiftKey||e.altKey)return;e.preventDefault();navigate(routePaths[b.dataset.workspace]);};}
+for(const a of document.querySelectorAll('[data-page]'))a.onclick=e=>{if(e.ctrlKey||e.metaKey||e.shiftKey||e.altKey)return;e.preventDefault();navigate(a.dataset.page==='courses'?courseUrl():'/data-sources');};
+$('#view-courses').onclick=e=>{if(e.ctrlKey||e.metaKey||e.shiftKey||e.altKey){e.currentTarget.href=courseUrl();return;}e.preventDefault();navigate(courseUrl());};
+$('#course-workspace').onchange=()=>{workspace=normalizeWorkspace($('#course-workspace').value);for(const key of ['category','course','location'])$('#filters').elements[key].value='';pendingFilters={};showWorkspace();load().then(saveFilterUrl).catch(e=>$('#message').textContent=e.message);};
+window.addEventListener('popstate',()=>{readRoute();restorePeriod();showWorkspace();window.scrollTo(0,0);load().catch(e=>$('#message').textContent=e.message);});
 $('#filters').elements.category.onchange=()=>{$('#filters').elements.course.value='';};
-showWorkspace();refresh().then(async()=>{await load();await loadWorkspaceMapping();}).catch(()=>showLogin());setInterval(()=>{if(!$('#dashboard').hidden)refresh().catch(e=>$('#message').textContent=e.message);},5000);
+restorePeriod();showWorkspace();refresh().then(async()=>{await load();}).catch(()=>showLogin());setInterval(()=>{if(!$('#dashboard').hidden)refresh().catch(e=>$('#message').textContent=e.message);},5000);
 
 async function loadWorkspaceMapping(){
  const d=await api('/api/workspaces');$('#workspace-category-fields').replaceChildren();

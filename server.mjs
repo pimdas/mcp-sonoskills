@@ -54,6 +54,7 @@ const server=http.createServer(async(req,res)=>{
   try {
     const url=new URL(req.url,'http://localhost');
     if(req.method==='GET' && url.pathname==='/health')return send(200,{ok:true});
+    if(req.method==='GET' && ['/', '/overview','/handson','/online/elearning','/online/on-demand','/online/live','/products','/external','/other','/courses','/royalties','/data-sources'].includes(url.pathname)){return send(200,await readFile(new URL('./public/index.html',import.meta.url)),'text/html; charset=utf-8');}
     if(req.method==='GET' && assets[url.pathname]){const [file,type]=assets[url.pathname];return send(200,await readFile(new URL(`./public/${file}`,import.meta.url)),type);}
     if(!url.pathname.startsWith('/api/'))return send(404,{error:'Niet gevonden'});
     if(req.method==='POST' && (req.headers['x-requested-with']!=='SonoSkills' || !String(req.headers['content-type']).startsWith('application/json')))return send(403,{error:'Ongeldig verzoek'});

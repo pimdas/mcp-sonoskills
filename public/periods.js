@@ -14,6 +14,7 @@ function setupPeriod(form){
   const custom=select.value==='custom';fields.forEach(el=>el.hidden=!custom);summary.hidden=custom;
   if(!custom){const dates=periodRange(select.value);form.elements.from.value=dates.from;form.elements.to.value=dates.to;summary.textContent=`${new Date(dates.from+'T12:00:00Z').toLocaleDateString('nl-NL',{day:'numeric',month:'short',year:'numeric',timeZone:'Europe/Amsterdam'})} – ${new Date(dates.to+'T12:00:00Z').toLocaleDateString('nl-NL',{day:'numeric',month:'short',year:'numeric',timeZone:'Europe/Amsterdam'})}`;}
  }
+ form.updatePeriod=update;
  select.addEventListener('change',()=>{update();if(select.value!=='custom')form.requestSubmit();});
  form.addEventListener('reset',()=>setTimeout(update,0));
  update();

@@ -8,6 +8,7 @@ test('HTTP authentication, CSRF protection, logout, empty data and CSV',async()=
   await Promise.race([once(child.stdout,'data'),new Promise((_,reject)=>{const t=setTimeout(()=>reject(Error('Startup timeout')),5000);t.unref();})]);
   const url='http://127.0.0.1:3197';
   assert.equal((await fetch(url+'/health')).status,200);
+  for(const path of ['/courses','/data-sources','/royalties','/online/elearning']){const r=await fetch(url+path);assert.equal(r.status,200);assert.ok((await r.text()).includes('SonoSkills | Insights'));}
   assert.equal((await fetch(url+'/api/analytics')).status,401);
   const creds={email:'test@example.com',password:'test-password-long-enough'};
   assert.equal((await fetch(url+'/api/login',{method:'POST',body:JSON.stringify(creds)})).status,403);
