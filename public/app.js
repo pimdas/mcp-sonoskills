@@ -33,12 +33,11 @@ async function load(){
   }
   pendingFilters={};
   const labels={active:'Actief',completed:'Afgerond',planned:'Gepland',canceled:'Geannuleerd'};
-  $('#template-groups').replaceChildren();let previous=null;
+  const listing=page==='analytics'?$('#workspace-template-groups'):$('#template-groups');listing.replaceChildren();
   for(const template of d.templates){
-    if(template.category!==previous){$('#template-groups').append(element('h3',template.category,'category-title'));previous=template.category;}
     const details=element('details','','template-card');details.open=opened.has(template.id);
     details.addEventListener('toggle',()=>details.open?opened.add(template.id):opened.delete(template.id));
-    const summary=element('summary',''),title=element('div','','template-name');title.append(element('strong',template.name),element('small',`Template #${template.id}${template.code?' · '+template.code:''}`));
+    const summary=element('summary',''),title=element('div','','template-name');title.append(element('strong',template.name),element('small',`${template.category} · Template #${template.id}${template.code?' · '+template.code:''}`));
     summary.append(title,element('span',`${template.editions.length} edities`,'badge'),element('span',`${template.participants} inschrijvingen`,'badge'));details.append(summary);
     if(template.workspace==='elearning'){const action=element('button','Royaltyafspraak instellen','subtle royalty-template-action');action.type='button';action.onclick=async()=>{document.querySelector('[data-workspace=royalties]').click();await loadRoyalties();$('#royalty-agreement').elements.courseId.value=template.id;$('#royalty-agreement').scrollIntoView({behavior:'smooth',block:'center'});$('#royalty-agreement').elements.recipient.focus();};details.append(action);}
     const scroll=element('div','','table-scroll'),table=element('table',''),head=element('thead',''),heading=element('tr','');
@@ -49,9 +48,9 @@ async function load(){
       for(const text of [`#${row.id}`,row.variant,{fixed:'Vast',flexible:'Flexibel',unknown:'Onbekend'}[row.type],row.type==='flexible'&&row.location==='Onbekend'?'—':row.location,date,row.end?new Date(row.end.slice(0,10)+'T12:00:00').toLocaleDateString('nl-NL'):'—',labels[row.status]||row.status,row.participants+(row.capacity&&row.type!=='flexible'?' / '+row.capacity:''),row.occupancy==null?'—':row.occupancy+'%'])tr.append(element('td',text));body.append(tr);
     }
     if(!template.editions.length){const tr=element('tr',''),td=element('td','Dit template heeft nog geen edities.');td.colSpan=9;tr.append(td);body.append(tr);}
-    table.append(body);scroll.append(table);details.append(scroll);$('#template-groups').append(details);
+    table.append(body);scroll.append(table);details.append(scroll);listing.append(details);
   }
-  if(!d.templates.length)$('#template-groups').append(element('p',status?.syncedAt?'Geen templates met edities binnen deze selectie.':'Je templates en edities verschijnen na de eerste synchronisatie.'));
+  if(!d.templates.length)listing.append(element('p',status?.syncedAt?'Geen templates met edities binnen deze selectie.':'Je templates en edities verschijnen na de eerste synchronisatie.'));
   $('#finance').replaceChildren();for(const [currency,totals] of Object.entries(d.totals)){for(const [key,label] of [['invoiced','Gefactureerd'],['open','Openstaand']]){const row=element('div','','finance-row');row.append(element('span',label),element('strong',currency==='ONBEKEND'?totals[key]+' (valuta onbekend)':new Intl.NumberFormat('nl-NL',{style:'currency',currency}).format(totals[key])));$('#finance').append(row);}}
   if(!Object.keys(d.totals).length)$('#finance').append(element('p','Nog geen facturen in deze selectie.'));
   $('#chart').replaceChildren();const months=Object.entries(d.months).sort(([a],[b])=>a.localeCompare(b));const max=Math.max(1,...months.map(([,v])=>v));for(const [month,count] of months){const wrap=element('div','','bar-wrap'),bar=element('progress','','bar');bar.max=max;bar.value=count;bar.title=`${month}: ${count} inschrijvingen`;wrap.append(element('span',String(count)),bar,element('span',month));$('#chart').append(wrap);}
@@ -86,6 +85,7 @@ async function navigate(path){
  try{await load();}catch(e){$('#message').textContent=e.message;}
 }
 function restorePeriod(){
+ $('#filters').elements.sort.value=['name','sales_desc','sales_asc','upcoming'].includes(pendingFilters.sort)?pendingFilters.sort:'name';
  const select=$('#filters [data-period-preset]');select.value=['month','quarter','year','custom'].includes(pendingFilters.period)?pendingFilters.period:(pendingFilters.from||pendingFilters.to?'custom':'year');
  if(select.value==='custom'){for(const key of ['from','to'])$('#filters').elements[key].value=pendingFilters[key]||'';}
  $('#filters').updatePeriod();
@@ -95,6 +95,7 @@ for(const a of document.querySelectorAll('[data-page]'))a.onclick=e=>{if(e.ctrlK
 $('#view-courses').onclick=e=>{if(e.ctrlKey||e.metaKey||e.shiftKey||e.altKey){e.currentTarget.href=courseUrl();return;}e.preventDefault();navigate(courseUrl());};
 $('#course-workspace').onchange=()=>{workspace=normalizeWorkspace($('#course-workspace').value);for(const key of ['category','course','location'])$('#filters').elements[key].value='';pendingFilters={};showWorkspace();load().then(saveFilterUrl).catch(e=>$('#message').textContent=e.message);};
 window.addEventListener('popstate',()=>{readRoute();restorePeriod();showWorkspace();window.scrollTo(0,0);load().catch(e=>$('#message').textContent=e.message);});
+$('#filters').elements.sort.onchange=()=>{if($('#filters').reportValidity())$('#filters').requestSubmit();};
 $('#filters').elements.category.onchange=()=>{$('#filters').elements.course.value='';};
 restorePeriod();showWorkspace();refresh().then(async()=>{await load();}).catch(()=>showLogin());setInterval(()=>{if(!$('#dashboard').hidden)refresh().catch(e=>$('#message').textContent=e.message);},5000);
 

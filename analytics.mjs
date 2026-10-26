@@ -65,18 +65,31 @@ export function analyze(data, filters={}, config={}) {
     if(month) months[month]=(months[month]||0)+1;
   }
   const emptyTemplates=matchingCourses.filter(c=>!workspaceEditions.some(e=>e.course_id===c.id)&&(!filters.course||String(c.id)===filters.course)&&inCategory(c.category_id));
+  const sort=['name','sales_desc','sales_asc','upcoming'].includes(filters.sort)?filters.sort:'name';
+  const today=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Amsterdam',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+  function dateKey(row){
+    const date=row.type!=='flexible'&&/^\d{4}-\d{2}-\d{2}/.test(row.start||'')?row.start.slice(0,10):'';
+    return {bucket:row.status==='canceled'?3:!date?2:date>=today?0:1,date};
+  }
+  function byDate(a,b){const x=dateKey(a),y=dateKey(b);return x.bucket-y.bucket||(x.bucket===1?y.date.localeCompare(x.date):x.date.localeCompare(y.date))||a.id-b.id;}
+  const byName=(a,b)=>a.name.localeCompare(b.name,'nl',{sensitivity:'base',numeric:true})||a.id-b.id;
+  const compare=(a,b)=>sort==='sales_desc'?b.participants-a.participants||byName(a,b):sort==='sales_asc'?a.participants-b.participants||byName(a,b):sort==='upcoming'?byDate(a,b):byName(a,b);
+  rows.sort(compare);
   const templateIds=new Set([...rows.map(r=>r.courseId),...emptyTemplates.map(c=>c.id)]);
   const templates=[...templateIds].map(id=>{
     const editions=rows.filter(r=>r.courseId===id),c=courses.get(id),first=editions[0]||{name:c.name||c.title||`Template ${id}`,code:c.code||'',category:index.path(c.category_id),categoryId:c.category_id};
     const known=editions.filter(e=>e.type!=='flexible' && e.capacity && e.status!=='canceled');
     const capacity=known.reduce((s,e)=>s+e.capacity,0);
     return {id,workspace:index.classify(c),name:first.name,code:first.code,category:first.category,categoryId:first.categoryId,editions,participants:editions.reduce((s,e)=>s+e.participants,0),occupancy:capacity?Math.round(known.reduce((s,e)=>s+e.participants,0)/capacity*100):null};
-  }).sort((a,b)=>a.category.localeCompare(b.category)||a.name.localeCompare(b.name));
+  });
+  const firstEdition=t=>[...t.editions].sort(byDate)[0]||{id:t.id,start:'',type:'unknown'};
+  templates.sort((a,b)=>sort==='upcoming'?byDate(firstEdition(a),firstEdition(b))||byName(a,b):compare(a,b));
+  rows.splice(0,rows.length,...templates.flatMap(t=>t.editions));
   const availableCourses=matchingCourses.filter(c=>inCategory(c.category_id));
   const availableLocations=new Set(workspaceEditions.map(e=>e.course_location_id));
   const relevantCategoryIds=new Set(matchingCourses.flatMap(c=>index.ancestry(c.category_id).map(c=>c.id)));
   const unassigned=[...courses.values()].filter(c=>index.classify(c)==='other').length;
-  return {workspace,periodBasis:booking?'booking':'course',financeEnabled:!external,unassigned,workspaceMapping:index.definitions,unknownTypes:workspaceEditions.filter(e=>kind(e)==='unknown').length,rows,templates,totals,months,metrics:{templates:templates.length,editions:rows.length,enrollments:active.length,cancelled:enrollments.filter(e=>e.status==='canceled').length,students:students.size,returning:[...students].filter(id=>history.get(id)?.size>1).length,occupancy:capacity?Math.round(usable.reduce((s,r)=>s+r.participants,0)/capacity*100):null},options:{courses:availableCourses.map(c=>({id:c.id,name:c.name||c.title||String(c.id)})),categories:[...categories.values()].filter(c=>relevantCategoryIds.has(c.id)).map(c=>({id:c.id,name:categoryPath(c.id)})).sort((a,b)=>a.name.localeCompare(b.name)),locations:[...locations].filter(([id])=>availableLocations.has(id)).map(([id,name])=>({id,name}))}};
+  return {workspace,sort,periodBasis:booking?'booking':'course',financeEnabled:!external,unassigned,workspaceMapping:index.definitions,unknownTypes:workspaceEditions.filter(e=>kind(e)==='unknown').length,rows,templates,totals,months,metrics:{templates:templates.length,editions:rows.length,enrollments:active.length,cancelled:enrollments.filter(e=>e.status==='canceled').length,students:students.size,returning:[...students].filter(id=>history.get(id)?.size>1).length,occupancy:capacity?Math.round(usable.reduce((s,r)=>s+r.participants,0)/capacity*100):null},options:{courses:availableCourses.map(c=>({id:c.id,name:c.name||c.title||String(c.id)})),categories:[...categories.values()].filter(c=>relevantCategoryIds.has(c.id)).map(c=>({id:c.id,name:categoryPath(c.id)})).sort((a,b)=>a.name.localeCompare(b.name)),locations:[...locations].filter(([id])=>availableLocations.has(id)).map(([id,name])=>({id,name}))}};
 }
 export function csv(rows) {
   const quote=v=>'"'+String(v??'').replace(/^[=+@\-\t\r]/,"'$&").replaceAll('"','""')+'"';
