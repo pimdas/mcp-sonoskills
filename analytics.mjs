@@ -72,7 +72,8 @@ export function analyze(data, filters={}, config={}) {
   }
   function byDate(a,b){const x=dateKey(a),y=dateKey(b);return x.bucket-y.bucket||(x.bucket===1?y.date.localeCompare(x.date):x.date.localeCompare(y.date))||a.id-b.id;}
   const byName=(a,b)=>a.name.localeCompare(b.name,'nl',{sensitivity:'base',numeric:true})||a.id-b.id;
-  const compare=(a,b)=>sort==='sales_desc'?b.orders-a.orders||byName(a,b):sort==='sales_asc'?a.orders-b.orders||byName(a,b):sort==='upcoming'?byDate(a,b):byName(a,b);
+  const salesCount=r=>['elearning','ondemand','live'].includes(r.workspace)?r.participants:r.orders;
+  const compare=(a,b)=>sort==='sales_desc'?salesCount(b)-salesCount(a)||byName(a,b):sort==='sales_asc'?salesCount(a)-salesCount(b)||byName(a,b):sort==='upcoming'?byDate(a,b):byName(a,b);
   rows.sort(compare);
   const templateIds=new Set([...rows.map(r=>r.courseId),...emptyTemplates.map(c=>c.id)]);
   const templates=[...templateIds].map(id=>{
