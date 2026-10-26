@@ -1,5 +1,5 @@
 export async function database() {
-  let get, put, close, getRoyalties, updateRoyalties;
+  let get, put, close, getRoyalties, updateRoyalties, getConfig, putConfig;
   if(process.env.DATABASE_URL) {
     const {default:pg}=await import('pg');
     const pool=new pg.Pool({connectionString:process.env.DATABASE_URL,max:3});
@@ -10,6 +10,9 @@ export async function database() {
     updateRoyalties=async change=>{const client=await pool.connect();try{await client.query('BEGIN');const state=(await client.query('SELECT payload FROM royalty_state WHERE id=1 FOR UPDATE')).rows[0].payload;const result=change(state);await client.query('UPDATE royalty_state SET payload=$1 WHERE id=1',[JSON.stringify(state)]);await client.query('COMMIT');return result;}catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}};
     get=async()=> (await pool.query('SELECT payload FROM snapshots WHERE id=1')).rows[0]?.payload;
     put=async payload=>{await pool.query('INSERT INTO snapshots(id,payload) VALUES(1,$1) ON CONFLICT(id) DO UPDATE SET payload=EXCLUDED.payload',[JSON.stringify(payload)]);};
+    await pool.query('CREATE TABLE IF NOT EXISTS workspace_config (id INTEGER PRIMARY KEY, payload JSONB NOT NULL)');
+    getConfig=async()=> (await pool.query('SELECT payload FROM workspace_config WHERE id=1')).rows[0]?.payload||{};
+    putConfig=async value=>{await pool.query('INSERT INTO workspace_config VALUES(1,$1) ON CONFLICT(id) DO UPDATE SET payload=EXCLUDED.payload',[JSON.stringify(value)]);};
     close=()=>pool.end();
   } else {
     if(process.env.NODE_ENV==='production') throw Error('DATABASE_URL ontbreekt');
@@ -21,7 +24,10 @@ export async function database() {
     updateRoyalties=async change=>{db.exec('BEGIN IMMEDIATE');try{const state=JSON.parse(db.prepare('SELECT payload FROM royalty_state WHERE id=1').get().payload);const result=change(state);db.prepare('UPDATE royalty_state SET payload=? WHERE id=1').run(JSON.stringify(state));db.exec('COMMIT');return result;}catch(e){db.exec('ROLLBACK');throw e;}};
     get=async()=>{const row=db.prepare('SELECT payload FROM snapshots WHERE id=1').get();return row?JSON.parse(row.payload):undefined;};
     put=async payload=>{db.prepare('INSERT INTO snapshots VALUES(1,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload').run(JSON.stringify(payload));};
+    db.exec('CREATE TABLE IF NOT EXISTS workspace_config (id INTEGER PRIMARY KEY,payload TEXT NOT NULL)');
+    getConfig=async()=>{const row=db.prepare('SELECT payload FROM workspace_config WHERE id=1').get();return row?JSON.parse(row.payload):{};};
+    putConfig=async value=>{db.prepare('INSERT INTO workspace_config VALUES(1,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload').run(JSON.stringify(value));};
     close=()=>db.close();
   }
-  return {get,put,close,getRoyalties,updateRoyalties};
+  return {get,put,close,getRoyalties,updateRoyalties,getConfig,putConfig};
 }

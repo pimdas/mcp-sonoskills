@@ -3,6 +3,7 @@ import {readFile} from 'node:fs/promises';
 import {randomBytes,createHmac,timingSafeEqual,scryptSync} from 'node:crypto';
 import {database} from './db.mjs';
 import {resources,fetchResource} from './eduframe.mjs';
+import {workspaceIndex,validateMapping} from './workspaces.mjs';
 import {analyze,csv} from './analytics.mjs';
 import {InputError,invoiceTargets,templateOptions,saveAgreement,removeAgreement,report,finalize,markPaid,reportCsv,settlementCsv} from './royalties.mjs';
 const production=process.env.NODE_ENV==='production';
@@ -13,7 +14,10 @@ if(!email || !password || password.length<16 || !secret || secret.length<32) thr
 const salt=randomBytes(16), hash=scryptSync(password,salt,64);
 const db=await database();
 let snapshot=await db.get()||{data:{},syncedAt:null},syncing=false,syncError=null;
+let workspaceConfig=await db.getConfig();
 let paymentState=snapshot.paymentState||{ready:false,error:null,syncedAt:null};
+const paymentScope=()=>templateOptions(snapshot.data,workspaceConfig).map(t=>t.id).sort((a,b)=>a-b).join(',');
+function paymentsStatus(){return paymentState.scope===paymentScope()?paymentState:{...paymentState,ready:false,error:'Synchroniseer betalingen voor de huidige eLearning-categorie-indeling.'};}
 const attempts=new Map();
 const sign=s=>createHmac('sha256',secret).update(s).digest('hex');
 const equal=(a,b)=>Buffer.byteLength(a)===Buffer.byteLength(b)&&timingSafeEqual(Buffer.from(a),Buffer.from(b));
@@ -32,10 +36,10 @@ async function sync() {
     const now=new Date().toISOString();
     let nextPaymentState;
     try {
-      const eligible=new Set(templateOptions(data).map(t=>t.id)),payments=[];
+      const eligible=new Set(templateOptions(data,workspaceConfig).map(t=>t.id)),payments=[];
       const targets=invoiceTargets(data).filter(t=>t.invoice.status!=='concept'&&t.courseIds.some(id=>eligible.has(id)));
       for(const t of targets)payments.push(...await fetchResource(`invoices/${t.invoice.id}/payments`,process.env.EDUFRAME_API_TOKEN));
-      data.payments=payments;nextPaymentState={ready:true,error:null,syncedAt:now,invoices:targets.length};
+      data.payments=payments;nextPaymentState={ready:true,error:null,syncedAt:now,invoices:targets.length,scope:[...eligible].sort((a,b)=>a-b).join(',')};
     }catch(e){data.payments=snapshot.data.payments||[];nextPaymentState={ready:false,error:e.message,syncedAt:paymentState.syncedAt};}
     const next={data,syncedAt:now,paymentState:nextPaymentState};
     await db.put(next);snapshot=next;paymentState=nextPaymentState;
@@ -69,24 +73,26 @@ const server=http.createServer(async(req,res)=>{
     }
     if(!session(req))return send(401,{error:'Log in om verder te gaan.'});
     if(url.pathname==='/api/logout' && req.method==='POST'){res.setHeader('Set-Cookie',`ss_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0${production?'; Secure':''}`);return send(200,{ok:true});}
-    if(url.pathname==='/api/status' && req.method==='GET')return send(200,{configured:!!process.env.EDUFRAME_API_TOKEN,syncedAt:snapshot.syncedAt,syncing,error:syncError,payments:paymentState,exactConnected:false});
+    if(url.pathname==='/api/status' && req.method==='GET')return send(200,{configured:!!process.env.EDUFRAME_API_TOKEN,syncedAt:snapshot.syncedAt,syncing,error:syncError,payments:paymentsStatus(),exactConnected:false});
     if(url.pathname==='/api/sync' && req.method==='POST'){
       if(!process.env.EDUFRAME_API_TOKEN)return send(409,{error:'Voeg EDUFRAME_API_TOKEN toe in Railway.'});
       if(syncing)return send(409,{error:'Er loopt al een synchronisatie.'});
       void sync();return send(202,{ok:true});
     }
+    if(url.pathname==='/api/workspaces'&&req.method==='GET')return send(200,workspaceIndex(snapshot.data,workspaceConfig));
+    if(url.pathname==='/api/workspaces'&&req.method==='POST'){let mapping;try{mapping=validateMapping((await body(req)).mapping,snapshot.data);}catch(e){return send(400,{error:e.message});}await db.putConfig(mapping);workspaceConfig=mapping;return send(200,{ok:true});}
     if(url.pathname.startsWith('/api/royalties')) {
       if(req.method==='GET' && ['/api/royalties','/api/royalties/export'].includes(url.pathname)){
-        const state=await db.getRoyalties(),r=report(snapshot.data,state,Object.fromEntries(url.searchParams));
+        const state=await db.getRoyalties(),r=report(snapshot.data,state,Object.fromEntries(url.searchParams),workspaceConfig);
         if(url.pathname.endsWith('/export')){res.setHeader('Content-Disposition','attachment; filename="sonoskills-royalties.csv"');return send(200,reportCsv(r),'text/csv; charset=utf-8');}
-        return send(200,{...r,payments:paymentState,syncing});
+        return send(200,{...r,payments:paymentsStatus(),syncing});
       }
-      if(req.method==='POST'&&url.pathname==='/api/royalties/agreement'){const input=await body(req);return send(200,await db.updateRoyalties(state=>saveAgreement(state,input,snapshot.data)));}
+      if(req.method==='POST'&&url.pathname==='/api/royalties/agreement'){const input=await body(req);return send(200,await db.updateRoyalties(state=>saveAgreement(state,input,snapshot.data,workspaceConfig)));}
       if(req.method==='POST'&&url.pathname==='/api/royalties/agreement/remove'){const input=await body(req);await db.updateRoyalties(state=>removeAgreement(state,input.id));return send(200,{ok:true});}
       if(req.method==='POST'&&url.pathname==='/api/royalties/finalize'){
-        if(syncing||!paymentState.ready||syncError)return send(409,{error:'Wacht op een succesvolle synchronisatie inclusief betalingen voordat je een afrekening vaststelt.'});
+        if(syncing||!paymentsStatus().ready||syncError)return send(409,{error:'Wacht op een succesvolle synchronisatie inclusief betalingen voordat je een afrekening vaststelt.'});
         const input=await body(req);const data=snapshot.data,at=paymentState.syncedAt;
-        return send(200,await db.updateRoyalties(state=>finalize(data,state,input,at)));
+        return send(200,await db.updateRoyalties(state=>finalize(data,state,input,at,workspaceConfig)));
       }
       if(req.method==='POST'&&url.pathname==='/api/royalties/paid'){const input=await body(req);return send(200,await db.updateRoyalties(state=>markPaid(state,input.id,input.date,input.reference)));}
       if(req.method==='GET'&&url.pathname==='/api/royalties/settlement-export'){
@@ -99,7 +105,7 @@ const server=http.createServer(async(req,res)=>{
       const filters=Object.fromEntries(url.searchParams);
       for(const k of ['from','to']) if(filters[k]&&!/^\d{4}-\d{2}-\d{2}$/.test(filters[k]))return send(400,{error:'Ongeldige datum'});
       if(filters.from && filters.to && filters.from>filters.to)return send(400,{error:'De einddatum ligt vóór de begindatum.'});
-      const result=analyze(snapshot.data,filters);
+      const result=analyze(snapshot.data,filters,workspaceConfig);
       if(url.pathname==='/api/export'){res.setHeader('Content-Disposition','attachment; filename="sonoskills-cursussen.csv"');return send(200,csv(result.rows),'text/csv; charset=utf-8');}
       return send(200,result);
     }

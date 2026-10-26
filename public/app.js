@@ -1,8 +1,11 @@
 const $=s=>document.querySelector(s);
 let status, lastSync=null;
 let workspace=new URL(location.href).searchParams.get('workspace')||'all';
-if(!['all','fixed','flexible','royalties'].includes(workspace))workspace='all';
+workspace=normalizeWorkspace(workspace);
+function normalizeWorkspace(value){const key=({fixed:'handson',flexible:'elearning'})[value]||value;return ['all','handson','elearning','ondemand','live','products','external','royalties','other'].includes(key)?key:'all';}
+const bookingWorkspace=()=>['elearning','ondemand','products'].includes(workspace);
 const opened=new Set();
+let mappingLoaded=false;
 async function api(path,body){const r=await fetch(path,body!==undefined?{method:'POST',headers:{'Content-Type':'application/json','X-Requested-With':'SonoSkills'},body:JSON.stringify(body)}:{});const d=await r.json();if(r.status===401 && path!=='/api/login'){showLogin();throw Error('Log opnieuw in.');}if(!r.ok)throw Error(d.error||'Er ging iets mis.');return d;}
 function showLogin(){$('#login').hidden=false;$('#dashboard').hidden=true;}
 function element(tag,text,className){const el=document.createElement(tag);el.textContent=text;if(className)el.className=className;return el;}
@@ -11,8 +14,8 @@ async function load(){
   if(workspace==='royalties')return loadRoyalties();
   const d=await api('/api/analytics?'+params());
   for(const key of ['templates','editions','enrollments','returning'])$('#'+key).textContent=status?.syncedAt?d.metrics[key].toLocaleString('nl-NL'):'—';
-  $('#occupancy').textContent=workspace==='flexible'?(status?.syncedAt?d.metrics.students.toLocaleString('nl-NL'):'—'):(d.metrics.occupancy==null?'—':d.metrics.occupancy+'%');
-  $('#migration-note').hidden=!d.unknownTypes;$('#migration-note').textContent=`Van ${d.unknownTypes} edities is het type nog niet bekend. Synchroniseer om deze in de juiste werkruimte te plaatsen.`;
+  $('#occupancy').textContent=bookingWorkspace()?(status?.syncedAt?d.metrics.students.toLocaleString('nl-NL'):'—'):(d.metrics.occupancy==null?'—':d.metrics.occupancy+'%');
+  const missing=d.workspaceMapping.filter(w=>!w.categoryIds.length).map(w=>w.name);$('#migration-note').hidden=!missing.length;$('#migration-note').textContent=missing.length?'Nog geen categorie gekoppeld voor: '+missing.join(', ')+'. Controleer de indeling onder Databronnen.':'';$('#other-workspace').hidden=!d.unassigned;$('#finance-panel').hidden=!d.financeEnabled;
   for(const key of ['category','course','location']){
     const select=$(`[name=${key}]`),selected=select.value;
     select.replaceChildren(element('option',{category:'Alle categorieën',course:'Alle templates',location:'Alle locaties'}[key]));select.firstChild.value='';
@@ -27,14 +30,15 @@ async function load(){
     details.addEventListener('toggle',()=>details.open?opened.add(template.id):opened.delete(template.id));
     const summary=element('summary',''),title=element('div','','template-name');title.append(element('strong',template.name),element('small',`Template #${template.id}${template.code?' · '+template.code:''}`));
     summary.append(title,element('span',`${template.editions.length} edities`,'badge'),element('span',`${template.participants} inschrijvingen`,'badge'));details.append(summary);
-    if(template.editions.some(e=>e.type==='flexible')){const action=element('button','Royaltyafspraak instellen','subtle royalty-template-action');action.type='button';action.onclick=async()=>{document.querySelector('[data-workspace=royalties]').click();await loadRoyalties();$('#royalty-agreement').elements.courseId.value=template.id;$('#royalty-agreement').scrollIntoView({behavior:'smooth',block:'center'});$('#royalty-agreement').elements.recipient.focus();};details.append(action);}
+    if(template.workspace==='elearning'){const action=element('button','Royaltyafspraak instellen','subtle royalty-template-action');action.type='button';action.onclick=async()=>{document.querySelector('[data-workspace=royalties]').click();await loadRoyalties();$('#royalty-agreement').elements.courseId.value=template.id;$('#royalty-agreement').scrollIntoView({behavior:'smooth',block:'center'});$('#royalty-agreement').elements.recipient.focus();};details.append(action);}
     const scroll=element('div','','table-scroll'),table=element('table',''),head=element('thead',''),heading=element('tr','');
-    for(const text of ['Editie','Variant','Type','Locatie','Startdatum','Status','Deelnemers','Bezetting'])heading.append(element('th',text));head.append(heading);table.append(head);
+    for(const text of ['Editie','Variant','Type','Locatie','Startdatum','Einddatum','Status','Deelnemers','Bezetting'])heading.append(element('th',text));head.append(heading);table.append(head);
     const body=element('tbody','');
     for(const row of template.editions){const tr=element('tr','');
       const date=row.type==='flexible'?'Flexibele start':row.start?new Date(row.start.slice(0,10)+'T12:00:00').toLocaleDateString('nl-NL'):'Geen startdatum';
-      for(const text of [`#${row.id}`,row.variant,{fixed:'Vast',flexible:'Flexibel',unknown:'Onbekend'}[row.type],row.type==='flexible'&&row.location==='Onbekend'?'—':row.location,date,labels[row.status]||row.status,row.participants+(row.capacity&&row.type!=='flexible'?' / '+row.capacity:''),row.occupancy==null?'—':row.occupancy+'%'])tr.append(element('td',text));body.append(tr);
+      for(const text of [`#${row.id}`,row.variant,{fixed:'Vast',flexible:'Flexibel',unknown:'Onbekend'}[row.type],row.type==='flexible'&&row.location==='Onbekend'?'—':row.location,date,row.end?new Date(row.end.slice(0,10)+'T12:00:00').toLocaleDateString('nl-NL'):'—',labels[row.status]||row.status,row.participants+(row.capacity&&row.type!=='flexible'?' / '+row.capacity:''),row.occupancy==null?'—':row.occupancy+'%'])tr.append(element('td',text));body.append(tr);
     }
+    if(!template.editions.length){const tr=element('tr',''),td=element('td','Dit template heeft nog geen edities.');td.colSpan=9;tr.append(td);body.append(tr);}
     table.append(body);scroll.append(table);details.append(scroll);$('#template-groups').append(details);
   }
   if(!d.templates.length)$('#template-groups').append(element('p',status?.syncedAt?'Geen templates met edities binnen deze selectie.':'Je templates en edities verschijnen na de eerste synchronisatie.'));
@@ -44,7 +48,7 @@ async function load(){
   if(!months.length)$('#chart').append(element('p','Nog geen inschrijvingen om te tonen.'));
 }
 async function refresh(){status=await api('/api/status');$('#login').hidden=true;$('#dashboard').hidden=false;$('#empty').hidden=!!status.syncedAt;$('#sync').disabled=status.syncing||!status.configured;$('#sync').textContent=status.syncing?'Synchroniseren…':'↻ Synchroniseren';$('#source-status').textContent=status.syncing?'Gegevens worden opgehaald…':status.error?'Synchronisatie mislukt':status.configured?'API-key ingesteld':'API-key nog niet ingesteld';$('#source-badge').textContent=status.syncedAt?'Verbonden':status.configured?'Gereed voor import':'Niet gekoppeld';$('#message').textContent=status.error||'';$('#last-sync').textContent=status.syncedAt?'Laatste succesvolle synchronisatie: '+new Date(status.syncedAt).toLocaleString('nl-NL'):'Nog geen synchronisatie uitgevoerd';if(lastSync!==status.syncedAt){lastSync=status.syncedAt;await load();}}
-$('#login-form').addEventListener('submit',async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;try{await api('/api/login',{email:$('#email').value,password:$('#password').value});$('#password').value='';$('#login-error').textContent='';await refresh();await load();}catch(err){$('#login-error').textContent=err.message;}finally{b.disabled=false;}});
+$('#login-form').addEventListener('submit',async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;try{await api('/api/login',{email:$('#email').value,password:$('#password').value});$('#password').value='';$('#login-error').textContent='';await refresh();await load();if(!mappingLoaded)await loadWorkspaceMapping();}catch(err){$('#login-error').textContent=err.message;}finally{b.disabled=false;}});
 $('#logout').onclick=async()=>{await api('/api/logout',{});showLogin();};
 $('#sync').onclick=async()=>{try{await api('/api/sync',{});await refresh();}catch(e){$('#message').textContent=e.message;}};
 $('#filters').onsubmit=async e=>{e.preventDefault();try{await load();$('#message').textContent='';}catch(err){$('#message').textContent=err.message;}};
@@ -53,19 +57,27 @@ $('#export').onclick=()=>{window.location.href='/api/export?'+params();};
 function showWorkspace(){
   for(const id of ['overview','courses'])$('#'+id).hidden=workspace==='royalties';
   $('#royalties').hidden=workspace!=='royalties';
-  const info={royalties:['Royalties','Afspraken en afrekeningen over ontvangen eLearning-omzet.'],all:['Alle cursussen','Alle categorieën, templates en edities bij elkaar.'],fixed:['Vaste cursussen','Templates en edities met een vaste cursusdatum.'],flexible:['Flexibele cursussen','Templates en edities met een flexibele start, zoals online cursussen.']}[workspace];
+  const info={royalties:['Royalties','Afspraken en afrekeningen over ontvangen eLearning-omzet.'],all:['Overzicht','Eigen templates en edities; externe cursussen staan apart.'],handson:['Hands-on cursussen','Templates en edities uit de categorie Hands-on, met cursusdata en locaties.'],elearning:['Online · eLearning','Alle templates en toegangsduurvarianten uit de categorie eLearning.'],ondemand:['Online · On-demand solo classes','Templates en edities uit de categorie On-demand solo classes.'],live:['Online · Live solo classes','Live online cursussen en hun geplande edities.'],products:['Producten','Alle templates uit de categorie Producten.'],external:['Extern','Partnercursussen voor planning, cursusedata en locaties; zonder omzetoverzicht.'],other:['Overige templates','Templates die nog niet aan een werkruimte zijn gekoppeld.']}[workspace];
   $('#workspace-title').textContent=info[0];$('#workspace-description').textContent=info[1];
-  $('#from-label').textContent=workspace==='flexible'?'Geboekt vanaf':'Cursus start vanaf';
-  $('#third-label').textContent=workspace==='flexible'?'Unieke deelnemers':'Gemiddelde bezetting';
-  $('#third-description').textContent=workspace==='flexible'?'Binnen de gekozen boekingsperiode':'Gewogen naar capaciteit';
-  $('#period-note').textContent=workspace==='flexible'?'Periode: boekingsdatum. Templates en edities blijven zichtbaar; aantallen en facturen horen bij orders uit deze boekingsperiode.':'Periode: startdatum van de editie. Bij een datumselectie vallen edities zonder startdatum buiten de selectie.';
+  $('#from-label').textContent=bookingWorkspace()?'Geboekt vanaf':'Cursus start vanaf';
+  $('#third-label').textContent=bookingWorkspace()?'Unieke deelnemers':'Gemiddelde bezetting';
+  $('#third-description').textContent=bookingWorkspace()?'Binnen de gekozen boekingsperiode':'Gewogen naar capaciteit';
+  $('#period-note').textContent=workspace==='external'?'Externe cursussen worden apart getoond en tellen niet mee in het eigen omzetoverzicht. Periode: startdatum van de editie.':bookingWorkspace()?'Periode: boekingsdatum. Templates en edities blijven zichtbaar; aantallen en facturen horen bij orders uit deze boekingsperiode.':'Periode: startdatum van de editie. Bij een datumselectie vallen edities zonder startdatum buiten de selectie.';
   for(const b of document.querySelectorAll('[data-workspace]')){b.classList.toggle('selected',b.dataset.workspace===workspace);b.setAttribute('aria-pressed',String(b.dataset.workspace===workspace));}
 }
 for(const b of document.querySelectorAll('[data-workspace]'))b.onclick=async()=>{
-  workspace=b.dataset.workspace;opened.clear();$('#filters').elements.course.value='';$('#filters').elements.location.value='';showWorkspace();
+  workspace=b.dataset.workspace;opened.clear();for(const key of ['category','course','location'])$('#filters').elements[key].value='';showWorkspace();
   const url=new URL(location.href);url.searchParams.set('workspace',workspace);history.pushState({},'',url);
   try{await load();}catch(e){$('#message').textContent=e.message;}
 };
-window.addEventListener('popstate',()=>{workspace=new URL(location.href).searchParams.get('workspace')||'all';if(!['all','fixed','flexible','royalties'].includes(workspace))workspace='all';showWorkspace();load().catch(e=>$('#message').textContent=e.message);});
+window.addEventListener('popstate',()=>{workspace=new URL(location.href).searchParams.get('workspace')||'all';workspace=normalizeWorkspace(workspace);showWorkspace();load().catch(e=>$('#message').textContent=e.message);});
 $('#filters').elements.category.onchange=()=>{$('#filters').elements.course.value='';};
-showWorkspace();refresh().then(load).catch(()=>showLogin());setInterval(()=>{if(!$('#dashboard').hidden)refresh().catch(e=>$('#message').textContent=e.message);},5000);
+showWorkspace();refresh().then(async()=>{await load();await loadWorkspaceMapping();}).catch(()=>showLogin());setInterval(()=>{if(!$('#dashboard').hidden)refresh().catch(e=>$('#message').textContent=e.message);},5000);
+
+async function loadWorkspaceMapping(){
+ const d=await api('/api/workspaces');$('#workspace-category-fields').replaceChildren();
+ for(const def of d.definitions){const label=element('label',def.name),select=element('select','');select.multiple=true;select.size=5;select.name=def.id;for(const c of d.categories){const o=element('option',c.name);o.value=c.id;o.selected=def.categoryIds.includes(c.id);select.append(o);}label.append(select);$('#workspace-category-fields').append(label);}
+ mappingLoaded=true;
+}
+$('#workspace-mapping').onsubmit=async e=>{e.preventDefault();const mapping={};for(const s of e.target.querySelectorAll('select'))mapping[s.name]=[...s.selectedOptions].map(o=>Number(o.value));try{await api('/api/workspaces',{mapping});$('#workspace-mapping-message').textContent='Indeling opgeslagen. Synchroniseer om ook de betalingsimport aan de eLearning-categorie aan te passen.';for(const key of ['category','course','location'])$('#filters').elements[key].value='';await load();}catch(err){$('#workspace-mapping-message').textContent=err.message;}};
+$('#workspace-auto').onclick=async()=>{try{await api('/api/workspaces',{mapping:{}});await loadWorkspaceMapping();await load();$('#workspace-mapping-message').textContent='Automatische categorie-indeling hersteld.';}catch(e){$('#workspace-mapping-message').textContent=e.message;}};

@@ -24,9 +24,9 @@ Eduframe scopes voor deze import: `courses:read`, `enrollments:read`, `orders:re
 ## Inbegrepen
 
 - Login met acht uur geldige, ondertekende HttpOnly/Secure/SameSite-cookies, verzoekbeveiliging en een limiet op loginpogingen. Eén beheeraccount via variables.
-- Werkruimtes Alle cursussen, Vaste cursussen en Flexibele cursussen; selectie op het expliciete Eduframe-editietype.
+- Werkruimtes op basis van Eduframe-categorieën: Hands-on; Online → eLearning, On-demand solo classes, Live solo classes; Producten; Extern. Het overzicht bevat eigen templates, zonder Extern.
 - Categorieën (inclusief bovenliggende categorieën), templates en uitklapbare edities met eigen ID en Eduframe-variantnaam.
-- Filters op categorie, template, locatie en periode. Vaste/alle cursussen: startdatum editie. Flexibele cursussen: boekingsdatum order, met inschrijfdatum als terugval.
+- Filters op categorie, template, locatie en periode. Hands-on/live/overzicht/extern: startdatum editie. eLearning/on-demand/producten: boekingsdatum order, met inschrijfdatum als terugval.
 - Cursusedities, actieve/afgeronde inschrijvingen, gewogen bezetting en terugkerende deelnemers.
 - Boekingsmaand via orderdatum, met inschrijfdatum als terugval.
 - Gefactureerd en openstaand, apart per valuta. Geen optelling van verschillende valuta; conceptfacturen uitgesloten. Dit is geen boekhoudkundige omzetverantwoording of daadwerkelijke betalingsanalyse.
@@ -36,7 +36,7 @@ Eduframe scopes voor deze import: `courses:read`, `enrollments:read`, `orders:re
 
 ## Definities en grenzen
 
-Bij vaste/alle cursussen selecteert de periodefilter edities op hun startdatum, niet facturen op factuurdatum. Flexibele cursussen zonder startdatum vallen daar buiten een datumselectie. Gebruik de werkruimte Flexibele cursussen om op boekingsperiode te filteren. Daar blijven edities zichtbaar bij nul boekingen, en tellen facturen alleen mee via orders uit de geselecteerde boekingsperiode. Categoriefilters omvatten ook subcategorieën. Templates met beide editietypes verschijnen in beide werkruimtes, met alleen de bijbehorende edities. Na deze update is een succesvolle synchronisatie nodig voor categorieën en editietypes; oudere records met onbekend type worden niet gegokt. Inschrijvingen tellen alleen bij `active` en `completed`. Bezetting: som actieve/afgeronde inschrijvingen gedeeld door som bekende maximale capaciteiten, exclusief geannuleerde cursussen. Terugkerend: deelnemer in de selectie met actieve/afgeronde inschrijvingen voor meer dan één unieke editie in de volledige import. Deelnemers worden geïdentificeerd met Eduframe-ID's; namen, e-mailadressen en vrije tekst worden niet geïmporteerd.
+De periodefilter gebruikt bij Hands-on, Live solo classes, Extern en Overzicht de startdatum van de editie. eLearning, On-demand solo classes en Producten gebruiken de boekingsdatum. Templates zonder edities blijven zichtbaar. Categoriefilters omvatten ook subcategorieën. Na een import zijn de categorieën en editietypes beschikbaar; de categorie bepaalt de werkruimte. Inschrijvingen tellen alleen bij `active` en `completed`. Bezetting: som actieve/afgeronde inschrijvingen gedeeld door som bekende maximale capaciteiten, exclusief geannuleerde cursussen. Terugkerend: deelnemer in de selectie met actieve/afgeronde inschrijvingen voor meer dan één unieke editie in de volledige import. Deelnemers worden geïdentificeerd met Eduframe-ID's; namen, e-mailadressen en vrije tekst worden niet geïmporteerd.
 
 Facturen worden via orders aan de cursussen gekoppeld. Multi-cursusorders kunnen bij meerdere selecties terugkomen; tel losse selecties niet op. Creditnota's en exacte boekingsregels moeten nog met echte SonoSkills-data worden gevalideerd. Er zijn nog geen jaarvergelijking, historische snapshots, AI-vragen, profielanalyses of Exact-data.
 
@@ -58,9 +58,9 @@ Open http://localhost:3000. Zet nooit secrets of productiedata in Git. Backendte
 
 ## Royalties voor eLearning
 
-De werkruimte Royalties beheert afspraken per template (alle edities/toegangsduurvarianten samen). Selecteer een template met minimaal één flexibele editie, een ontvanger, percentage (maximaal twee decimalen), ingangsdatum en optionele einddatum. Meerdere ontvangers zijn mogelijk. Afspraken voor dezelfde ontvanger en hetzelfde template mogen niet overlappen. De ingangsdatum wordt vergeleken met de betaaldatum.
+De werkruimte Royalties beheert afspraken per template (alle edities/toegangsduurvarianten samen). Selecteer een template uit de categorie eLearning (inclusief ondercategorieën), een ontvanger, percentage (maximaal twee decimalen), ingangsdatum en optionele einddatum. Meerdere ontvangers zijn mogelijk. Afspraken voor dezelfde ontvanger en hetzelfde template mogen niet overlappen. De ingangsdatum wordt vergeleken met de betaaldatum.
 
-**Extra Eduframe-scope:** `payments:read`. De synchronisatie vraagt betaalrecords op via `GET /invoices/{invoice_id}/payments` voor facturen van templates met flexibele edities. Dit kan de eerste import aanzienlijk verlengen. Alle verzoeken blijven read-only en volgen dezelfde rate limit. Als de betaalimport faalt, worden de overige dashboardgegevens bijgewerkt en de vorige betaalgegevens bewaard met een zichtbare foutstatus. Vaststellen is dan geblokkeerd.
+**Extra Eduframe-scope:** `payments:read`. De synchronisatie vraagt betaalrecords op via `GET /invoices/{invoice_id}/payments` voor facturen van templates uit de eLearning-categorie. Dit kan de eerste import aanzienlijk verlengen. Alle verzoeken blijven read-only en volgen dezelfde rate limit. Als de betaalimport faalt, worden de overige dashboardgegevens bijgewerkt en de vorige betaalgegevens bewaard met een zichtbare foutstatus. Vaststellen is dan geblokkeerd.
 
 De grondslag bestaat uitsluitend uit `paid`-betaalrecords, met hun geregistreerde `amount`, `currency` en `date`. Deelbetalingen vallen in hun eigen betaalperiode. De datum is de betaaldatum zoals Eduframe die levert; dit is geen onafhankelijke bankreconciliatie. Een terugbetaling corrigeert de grondslag alleen als deze in Eduframe als **negatieve betaalde betaling** is geregistreerd. Een creditnota of annulering zonder dergelijke betaling wordt niet automatisch als terugbetaling aangenomen. Controleer deze registratie bij de eerste echte afrekening.
 
@@ -71,3 +71,14 @@ Het conceptoverzicht is dynamisch en toont ontvangen, royalty, al vastgesteld en
 Na vaststellen is een afspraak beschermd: alleen een einddatum die reeds afgerekende betalingen niet uitsluit kan worden aangepast. Voor een nieuw percentage sluit je de bestaande afspraak af en voeg je een nieuwe toe. Een ongebruikte afspraak kan worden bewerkt of verwijderd. Afrekeningen kunnen als betaald worden gemarkeerd met betaaldatum en referentie; dit voert **geen** bankbetaling uit. CSV-export is beschikbaar voor het overzicht en voor elke vastgestelde afrekening inclusief brondetails.
 
 Afspraken en afrekeningen staan in een aparte `royalty_state`-tabel en worden niet overschreven door Eduframe-imports. Mutaties gebruiken een database-transactie en, in PostgreSQL, een rijvergrendeling om gelijktijdig dubbel vaststellen te voorkomen. Maak ook van deze tabel back-ups. Controleer de eerste echte berekening tegen Eduframe voordat je erop afrekent.
+
+
+## Werkruimtes en categorieën
+
+De categorie van het **template** bepaalt de werkruimte; `FixedPlannedCourse`/`FlexiblePlannedCourse` bepaalt dit niet meer. Hoofdcategorieën worden automatisch op naam herkend (niet gevoelig voor hoofdletters, spaties en koppeltekens). Onderliggende categorieën erven hun werkruimte. Hands-on en Live solo classes filteren op de startdatum van de editie; eLearning, On-demand solo classes en Producten filteren op boekingsdatum. De eigen overzichtspagina filtert op startdatum. Templates zonder enige editie blijven zichtbaar, ook onder Producten.
+
+Onder Databronnen → Werkruimtes koppelen aan Eduframe-categorieën kun je voor elke werkruimte één of meerdere bestaande categorieën selecteren. De koppelingen gebruiken stabiele Eduframe-ID's en staan in de onafhankelijke tabel `workspace_config`. Met Automatische indeling herstellen worden de handmatige koppelingen verwijderd. Extern en Producten krijgen voorrang op een categorie met een andere werkruimtenaam binnen hun eigen subtree. Overige templates blijven vindbaar in het overzicht en de werkruimte Overige templates.
+
+Externe cursussen tonen templates, edities, data, locaties en inschrijvingen. Hun financiële overzicht wordt verborgen en hun facturen tellen niet mee in het eigen overzicht. De toepassing blijft uitsluitend lezen uit Eduframe; planning en cursusgegevens worden niet teruggeschreven.
+
+Royalties en de betalingsimport zijn beperkt tot templates die aan de eLearning-werkruimte zijn toegewezen. Na een gewijzigde indeling is opnieuw synchroniseren nodig voordat afrekeningen kunnen worden vastgesteld. Reeds vastgestelde afrekeningen blijven bewaard. De mapping, automatische categorieherkenning, uitsluiting van externe omzet en royaltyselectie zijn gedekt door tests.

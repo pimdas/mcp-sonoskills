@@ -25,7 +25,7 @@ test('royalty routes persist agreements, enforce payment readiness and preserve 
  const {mkdtemp,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),{join}=await import('node:path');
  const dir=await mkdtemp(join(tmpdir(),'royalties-')),path=join(dir,'test.sqlite');
  const {database}=await import('../db.mjs');process.env.SQLITE_PATH=path;
- const db=await database();await db.put({syncedAt:'2026-02-01T12:00:00Z',paymentState:{ready:true,syncedAt:'2026-02-01T12:00:00Z'},data:{courses:[{id:1,name:'eLearning'}],planned_courses:[{id:10,course_id:1,type:'FlexiblePlannedCourse'}],orders:[{id:1,planned_course_id:10}],invoices:[{id:1,order_id:1,number:'TEST',status:'paid',currency:'EUR'}],payments:[{id:1,invoice_id:1,amount:'100.00',currency:'EUR',status:'paid',date:'2026-01-15'}]}});await db.close();
+ const db=await database();await db.put({syncedAt:'2026-02-01T12:00:00Z',paymentState:{ready:true,scope:'1',syncedAt:'2026-02-01T12:00:00Z'},data:{categories:[{id:1,name:'eLearning'}],courses:[{id:1,name:'eLearning',category_id:1}],planned_courses:[{id:10,course_id:1,type:'FlexiblePlannedCourse'}],orders:[{id:1,planned_course_id:10}],invoices:[{id:1,order_id:1,number:'TEST',status:'paid',currency:'EUR'}],payments:[{id:1,invoice_id:1,amount:'100.00',currency:'EUR',status:'paid',date:'2026-01-15'}]}});await db.close();
  const child=spawn(process.execPath,['server.mjs'],{cwd:new URL('..',import.meta.url),env:{...process.env,NODE_ENV:'development',PORT:'3198',SQLITE_PATH:path,DATABASE_URL:'',EDUFRAME_API_TOKEN:'',ADMIN_EMAIL:'test@example.com',ADMIN_PASSWORD:'test-password-long-enough',SESSION_SECRET:'12345678901234567890123456789012'},stdio:['ignore','pipe','pipe']});
  try{
   await once(child.stdout,'data');const url='http://127.0.0.1:3198';

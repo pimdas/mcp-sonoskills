@@ -1,3 +1,4 @@
+import {workspaceIndex} from './workspaces.mjs';
 import {randomUUID} from 'node:crypto';
 export class InputError extends Error {}
 const fail=message=>{throw new InputError(message);};
@@ -6,7 +7,7 @@ export function cents(value){const s=String(value??'');if(!/^-?\d+(\.\d{1,2})?$/
 export const round=n=>Math.sign(n)*Math.round(Math.abs(n)/10000);
 const range=(date,from,to)=>(!from||date>=from)&&(!to||date<=to);
 export function emptyState(){return {parties:[],agreements:[],settlements:[]};}
-export function templateOptions(data){const ids=new Set((data.planned_courses||[]).filter(e=>e.type==='FlexiblePlannedCourse').map(e=>e.course_id));return (data.courses||[]).filter(c=>ids.has(c.id)).map(c=>({id:c.id,name:c.name||c.title||`Template ${c.id}`})).sort((a,b)=>a.name.localeCompare(b.name));}
+export function templateOptions(data,config={}){const index=workspaceIndex(data,config);return (data.courses||[]).filter(c=>index.classify(c)==='elearning').map(c=>({id:c.id,name:c.name||c.title||`Template ${c.id}`})).sort((a,b)=>a.name.localeCompare(b.name));}
 // Only a uniquely linked template is eligible; never split a bundle by participant count.
 export function invoiceTargets(data){
  const editions=new Map((data.planned_courses||[]).map(e=>[e.id,e]));
@@ -19,10 +20,10 @@ export function invoiceTargets(data){
   return {invoice,courseId:templates.size===1?[...templates][0]:null,editionIds:[...ids],courseIds:[...templates],ambiguous:templates.size!==1||linked.length!==ids.size};
  });
 }
-export function saveAgreement(state,input,data){
+export function saveAgreement(state,input,data,config={}){
  const id=input.id||randomUUID(),old=state.agreements.find(a=>a.id===id);
  if(input.id&&!old)fail('Afspraak niet gevonden.');
- const courseId=Number(input.courseId);if(!templateOptions(data).some(t=>t.id===courseId))fail('Kies een eLearning-template met flexibele edities.');
+ const courseId=Number(input.courseId);if(!templateOptions(data,config).some(t=>t.id===courseId))fail('Kies een template in de categorie eLearning.');
  const name=String(input.recipient||'').trim();if(!name||name.length>160)fail('Vul een ontvanger in (maximaal 160 tekens).');
  const pct=String(input.percentage??'').replace(',','.');if(!/^\d{1,3}(\.\d{1,2})?$/.test(pct))fail('Vul een percentage in met maximaal twee decimalen.');
  const bps=Math.round(Number(pct)*100);if(bps<=0||bps>10000)fail('Het percentage moet groter zijn dan 0 en maximaal 100.');
@@ -40,7 +41,7 @@ export function saveAgreement(state,input,data){
  state.agreements=state.agreements.filter(a=>a.id!==id);state.agreements.push(a);return a;
 }
 export function removeAgreement(state,id){if(state.settlements.some(s=>s.lines.some(l=>l.agreementId===id)))fail('Deze afspraak is al gebruikt. Sluit de afspraak af met een einddatum.');if(!state.agreements.some(a=>a.id===id))fail('Afspraak niet gevonden.');state.agreements=state.agreements.filter(a=>a.id!==id);}
-export function report(data,state,filters={}){
+export function report(data,state,filters={},config={}){
  const from=filters.from||'',to=filters.to||'';
  if((from&&!validDate(from))||(to&&!validDate(to))||(from&&to&&from>to))fail('Kies een geldige periode.');
  const courses=new Map((data.courses||[]).map(c=>[c.id,c.name||c.title||`Template ${c.id}`]));
@@ -48,7 +49,7 @@ export function report(data,state,filters={}){
  const targets=invoiceTargets(data),targetMap=new Map(targets.map(t=>[t.invoice.id,t]));
  const warnings=[],desired=new Map(),seen=new Set();
  const matches=l=>(!filters.courseId||String(l.courseId)===String(filters.courseId))&&(!filters.partyId||l.partyId===filters.partyId)&&range(l.date,from,to);
- const eligible=new Set(templateOptions(data).map(c=>c.id));
+ const eligible=new Set(templateOptions(data,config).map(c=>c.id));
  for(const t of targets){if(t.ambiguous&&t.courseIds.some(id=>eligible.has(id)&&state.agreements.some(a=>a.courseId===id)))warnings.push(`Factuur ${t.invoice.number||t.invoice.id}: order bevat meerdere templates of een onbekende editie; niet automatisch toegerekend.`);}
  for(const p of data.payments||[]){
   if(seen.has(p.id))continue;seen.add(p.id);
@@ -76,12 +77,12 @@ export function report(data,state,filters={}){
  }
  const groups=new Map();for(const l of lines){const key=`${l.courseId}:${l.partyId}:${l.currency}`;if(!groups.has(key))groups.set(key,{courseId:l.courseId,template:l.template,partyId:l.partyId,recipient:l.recipient,currency:l.currency,baseCents:0,numerator:0,currentBase:0,currentNumerator:0,settledNumerator:0,rates:[],lines:[]});const g=groups.get(key);for(const k of ['baseCents','numerator','currentBase','currentNumerator','settledNumerator']){g[k]+=l[k];if(!Number.isSafeInteger(g[k]))fail('Het totaal is te groot voor een veilige automatische berekening.');}if(!g.rates.includes(l.bps/100))g.rates.push(l.bps/100);g.lines.push(l);}
  const rows=[...groups.values()].map(g=>({...g,dueCents:round(g.numerator),royaltyCents:round(g.currentNumerator),settledCents:round(g.settledNumerator)})).sort((a,b)=>a.recipient.localeCompare(b.recipient)||a.template.localeCompare(b.template));
- return {rows,excludedInvoices:targets.filter(t=>t.ambiguous).length,warnings:[...new Set(warnings)],pending:lines.filter(l=>l.numerator!==0||l.baseCents!==0),templates:templateOptions(data),parties:state.parties,agreements:state.agreements.map(a=>({...a,template:courses.get(a.courseId)||`Template ${a.courseId}`,recipient:parties.get(a.partyId),locked:state.settlements.some(s=>s.lines.some(l=>l.agreementId===a.id))})),settlements:state.settlements.filter(s=>(!filters.partyId||s.partyId===filters.partyId)&&(!from||s.to>=from)&&(!to||s.from<=to))};
+ return {rows,excludedInvoices:targets.filter(t=>t.ambiguous).length,warnings:[...new Set(warnings)],pending:lines.filter(l=>l.numerator!==0||l.baseCents!==0),templates:templateOptions(data,config),parties:state.parties,agreements:state.agreements.map(a=>({...a,template:courses.get(a.courseId)||`Template ${a.courseId}`,recipient:parties.get(a.partyId),locked:state.settlements.some(s=>s.lines.some(l=>l.agreementId===a.id))})),settlements:state.settlements.filter(s=>(!filters.partyId||s.partyId===filters.partyId)&&(!from||s.to>=from)&&(!to||s.from<=to))};
 }
-export function finalize(data,state,input,syncedAt){
+export function finalize(data,state,input,syncedAt,config={}){
  if(!validDate(input.from)||!validDate(input.to)||input.from>input.to)fail('Kies een begin- en einddatum voor de afrekening.');
  if(!state.parties.some(p=>p.id===input.partyId))fail('Kies één ontvanger voor de afrekening.');
- const r=report(data,state,{from:input.from,to:input.to,partyId:input.partyId});
+ const r=report(data,state,{from:input.from,to:input.to,partyId:input.partyId},config);
  if(r.warnings.length)fail('Los eerst de gemelde toerekeningsproblemen op.');
  if(!r.pending.length)fail('Er zijn geen nieuwe royaltybedragen of correcties om vast te stellen.');
  const s={id:randomUUID(),partyId:input.partyId,recipient:state.parties.find(p=>p.id===input.partyId).name,from:input.from,to:input.to,status:'finalized',createdAt:new Date().toISOString(),syncedAt,lines:r.pending.map(({currentBase,currentNumerator,settledNumerator,...l})=>l),totals:r.rows.filter(g=>g.lines.some(l=>l.numerator!==0||l.baseCents!==0)).map(g=>({courseId:g.courseId,template:g.template,currency:g.currency,baseCents:g.baseCents,amountCents:g.dueCents}))};
