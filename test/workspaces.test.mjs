@@ -10,3 +10,12 @@ test('royalty eligibility includes eLearning only, not other flexible templates'
 test('unassigned templates remain visible and category filters stay inside workspace',()=>{const d=fixture(),r=analyze(d,{workspace:'other'});assert.equal(r.templates[0].id,7);assert.equal(r.unassigned,1);assert.equal(analyze(d,{workspace:'elearning',category:'7'}).rows.length,0);assert.ok(!analyze(d,{workspace:'elearning'}).options.categories.some(c=>c.id===7));});
 test('workspace configuration persists independently from snapshots and royalties',async()=>{process.env.SQLITE_PATH=':memory:';const {database}=await import('../db.mjs'),db=await database();await db.putConfig({elearning:[3]});await db.put({data:{}});assert.deepEqual(await db.getConfig(),{elearning:[3]});assert.deepEqual((await db.getRoyalties()).agreements,[]);await db.close();});
 test('orders linked to external editions are excluded even if an own enrollment shares the order',()=>{const d=fixture();d.enrollments.push({id:1,planned_course_id:60,order_id:1,status:'active'});assert.deepEqual(analyze(d).totals,{});});
+
+test('SonoClasses roots include templates at every descendant depth, including saved empty mappings',()=>{
+ const d=fixture();d.categories.find(c=>c.id===4).name='ON-DEMAND SONOCLASSES';d.categories.find(c=>c.id===5).name='LIVE SONOCLASSES';
+ d.categories.push({id:40,name:'Upper Extremity',parent_id:4},{id:41,name:'Shoulder',parent_id:40},{id:42,name:'Advanced',parent_id:41},{id:50,name:'Clinical',parent_id:5},{id:51,name:'Live shoulder',parent_id:50});
+ d.courses.push({id:40,name:'Deep on-demand',category_id:42},{id:50,name:'Deep live',category_id:51});d.planned_courses.push({id:400,course_id:40,type:'FlexiblePlannedCourse'},{id:500,course_id:50,type:'FixedPlannedCourse',start_date:'2026-10-01'});
+ const config={ondemand:[],live:[]};const on=analyze(d,{workspace:'ondemand'},config),live=analyze(d,{workspace:'live'},config);
+ assert.deepEqual(on.templates.map(t=>t.id).sort((a,b)=>a-b),[3,40]);assert.deepEqual(live.templates.map(t=>t.id).sort((a,b)=>a-b),[4,50]);assert.ok(on.rows.some(r=>r.id===400));assert.ok(live.rows.some(r=>r.id===500));
+ assert.equal(analyze(d,{workspace:'ondemand',category:'4'},config).templates.length,2);
+});
