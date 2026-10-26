@@ -18,7 +18,6 @@ let mappingLoaded=false;
 async function api(path,body){const r=await fetch(path,body!==undefined?{method:'POST',headers:{'Content-Type':'application/json','X-Requested-With':'SonoSkills'},body:JSON.stringify(body)}:{});const d=await r.json();if(r.status===401 && path!=='/api/login'){showLogin();throw Error('Log opnieuw in.');}if(!r.ok)throw Error(d.error||'Er ging iets mis.');return d;}
 function showLogin(){$('#login').hidden=false;$('#dashboard').hidden=true;}
 function element(tag,text,className){const el=document.createElement(tag);el.textContent=text;if(className)el.className=className;return el;}
-function financeTable(headers,rows){const wrap=element('div','','table-scroll'),table=element('table',''),head=element('thead',''),heading=element('tr','');for(const h of headers)heading.append(element('th',h));head.append(heading);table.append(head);const body=element('tbody','');for(const cells of rows){const tr=element('tr','');for(const c of cells)tr.append(element('td',c));body.append(tr);}if(!rows.length){const tr=element('tr',''),td=element('td','Geen gegevens in deze selectie.');td.colSpan=headers.length;tr.append(td);body.append(tr);}table.append(body);wrap.append(table);return wrap;}
 function params(){return new URLSearchParams([['workspace',workspace],...[...new FormData($('#filters'))].filter(([,v])=>v)]);}
 async function load(){
   if(page==='sources')return loadWorkspaceMapping();
@@ -70,12 +69,6 @@ async function load(){
   $('#finance').replaceChildren();for(const [currency,totals] of Object.entries(d.totals)){for(const [key,label] of [['orderValue','Orderwaarde'],['invoiced','Gefactureerd'],['open','Openstaand']]){const row=element('div','','finance-row');row.append(element('span',label),element('strong',totals[key]===null?'Nog niet beschikbaar':currency==='ONBEKEND'?totals[key]+' (valuta onbekend)':new Intl.NumberFormat('nl-NL',{style:'currency',currency}).format(totals[key])));$('#finance').append(row);}}
   if(!Object.keys(d.totals).length)$('#finance').append(element('p','Geen gekoppelde orders of facturen in deze selectie.'));
   $('#finance-checks').replaceChildren(...d.finance.warnings.map(w=>element('p',w,'royalty-warning')));
-  const audit=element('details','','template-card');audit.append(element('summary',`Omzet onderbouwen · ${d.finance.invoiceCount||0} facturen meegeteld`));
-  audit.append(element('p','Hieronder staat per factuur of deze meetelt en waarom. Orderwaarde telt actieve en aangevraagde orders; gefactureerd en openstaand komen uit facturen. Deze bedragen worden niet bij elkaar opgeteld. Niet gekoppelde facturen kunnen ook andere cursussen betreffen.','note'));
-  const download=element('button','↓ Omzetcontrole downloaden','subtle');download.type='button';download.onclick=()=>{if($('#filters').reportValidity())location.href='/api/finance-export?'+params();};audit.append(download);
-  audit.append(financeTable(['Factuur','Order','Datum','Valuta','Bedrag','Openstaand','Telt mee','Reden'],d.finance.audit.invoices.map(i=>[i.number,i.orderId??'—',i.date,i.currency,i.total===null?'Onbekend':i.total.toFixed(2),i.open===null?'Onbekend':i.open.toFixed(2),i.counted?'Ja':'Nee',i.reason])));
-  audit.append(element('h3','Orders ter controle','category-title'),financeTable(['Order','Status','Boekingsdatum','Valuta','Orderbedrag','Facturen'],d.finance.audit.orders.map(o=>[o.id,o.status,o.date,o.currency,o.total===null?'Onbekend':o.total.toFixed(2),o.invoiceNumbers.join(', ')||'Geen herkenbare factuur'])));
-  $('#finance-checks').append(audit);
   $('#chart').replaceChildren();const months=Object.entries(d.months).sort(([a],[b])=>a.localeCompare(b));const max=Math.max(1,...months.map(([,v])=>v));for(const [month,count] of months){const wrap=element('div','','bar-wrap'),bar=element('progress','','bar');bar.max=max;bar.value=count;bar.title=`${month}: ${count} orders`;wrap.append(element('span',String(count)),bar,element('span',month));$('#chart').append(wrap);}
   if(!months.length)$('#chart').append(element('p','Nog geen orders om te tonen.'));
 }
