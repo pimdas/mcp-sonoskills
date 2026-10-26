@@ -4,6 +4,7 @@ import {randomBytes,createHmac,timingSafeEqual,scryptSync} from 'node:crypto';
 import {database} from './db.mjs';
 import {resources,fetchResource} from './eduframe.mjs';
 import {analyze,csv} from './analytics.mjs';
+import {InputError,invoiceTargets,templateOptions,saveAgreement,removeAgreement,report,finalize,markPaid,reportCsv,settlementCsv} from './royalties.mjs';
 const production=process.env.NODE_ENV==='production';
 const email=process.env.ADMIN_EMAIL;
 const password=process.env.ADMIN_PASSWORD;
@@ -12,6 +13,7 @@ if(!email || !password || password.length<16 || !secret || secret.length<32) thr
 const salt=randomBytes(16), hash=scryptSync(password,salt,64);
 const db=await database();
 let snapshot=await db.get()||{data:{},syncedAt:null},syncing=false,syncError=null;
+let paymentState=snapshot.paymentState||{ready:false,error:null,syncedAt:null};
 const attempts=new Map();
 const sign=s=>createHmac('sha256',secret).update(s).digest('hex');
 const equal=(a,b)=>Buffer.byteLength(a)===Buffer.byteLength(b)&&timingSafeEqual(Buffer.from(a),Buffer.from(b));
@@ -27,11 +29,19 @@ async function sync() {
   try {
     const data={};
     for(const name of Object.keys(resources)) data[name]=await fetchResource(name,process.env.EDUFRAME_API_TOKEN);
-    const next={data,syncedAt:new Date().toISOString()};
-    await db.put(next);snapshot=next;
+    const now=new Date().toISOString();
+    let nextPaymentState;
+    try {
+      const eligible=new Set(templateOptions(data).map(t=>t.id)),payments=[];
+      const targets=invoiceTargets(data).filter(t=>t.invoice.status!=='concept'&&t.courseIds.some(id=>eligible.has(id)));
+      for(const t of targets)payments.push(...await fetchResource(`invoices/${t.invoice.id}/payments`,process.env.EDUFRAME_API_TOKEN));
+      data.payments=payments;nextPaymentState={ready:true,error:null,syncedAt:now,invoices:targets.length};
+    }catch(e){data.payments=snapshot.data.payments||[];nextPaymentState={ready:false,error:e.message,syncedAt:paymentState.syncedAt};}
+    const next={data,syncedAt:now,paymentState:nextPaymentState};
+    await db.put(next);snapshot=next;paymentState=nextPaymentState;
   }catch(e){syncError=e.message;console.error('Synchronisatie mislukt:',e.message);}finally{syncing=false;}
 }
-const assets={'/':['index.html','text/html; charset=utf-8'],'/app.js':['app.js','text/javascript; charset=utf-8'],'/style.css':['style.css','text/css; charset=utf-8']};
+const assets={'/royalties.js':['royalties.js','text/javascript; charset=utf-8'],'/':['index.html','text/html; charset=utf-8'],'/app.js':['app.js','text/javascript; charset=utf-8'],'/style.css':['style.css','text/css; charset=utf-8']};
 const server=http.createServer(async(req,res)=>{
   const send=(status,data,type='application/json; charset=utf-8')=>{res.writeHead(status,{'Content-Type':type});res.end(type.startsWith('application/json')?JSON.stringify(data):data);};
   res.setHeader('Cache-Control','no-store');res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('X-Frame-Options','DENY');res.setHeader('Referrer-Policy','same-origin');
@@ -59,11 +69,31 @@ const server=http.createServer(async(req,res)=>{
     }
     if(!session(req))return send(401,{error:'Log in om verder te gaan.'});
     if(url.pathname==='/api/logout' && req.method==='POST'){res.setHeader('Set-Cookie',`ss_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0${production?'; Secure':''}`);return send(200,{ok:true});}
-    if(url.pathname==='/api/status' && req.method==='GET')return send(200,{configured:!!process.env.EDUFRAME_API_TOKEN,syncedAt:snapshot.syncedAt,syncing,error:syncError,exactConnected:false});
+    if(url.pathname==='/api/status' && req.method==='GET')return send(200,{configured:!!process.env.EDUFRAME_API_TOKEN,syncedAt:snapshot.syncedAt,syncing,error:syncError,payments:paymentState,exactConnected:false});
     if(url.pathname==='/api/sync' && req.method==='POST'){
       if(!process.env.EDUFRAME_API_TOKEN)return send(409,{error:'Voeg EDUFRAME_API_TOKEN toe in Railway.'});
       if(syncing)return send(409,{error:'Er loopt al een synchronisatie.'});
       void sync();return send(202,{ok:true});
+    }
+    if(url.pathname.startsWith('/api/royalties')) {
+      if(req.method==='GET' && ['/api/royalties','/api/royalties/export'].includes(url.pathname)){
+        const state=await db.getRoyalties(),r=report(snapshot.data,state,Object.fromEntries(url.searchParams));
+        if(url.pathname.endsWith('/export')){res.setHeader('Content-Disposition','attachment; filename="sonoskills-royalties.csv"');return send(200,reportCsv(r),'text/csv; charset=utf-8');}
+        return send(200,{...r,payments:paymentState,syncing});
+      }
+      if(req.method==='POST'&&url.pathname==='/api/royalties/agreement'){const input=await body(req);return send(200,await db.updateRoyalties(state=>saveAgreement(state,input,snapshot.data)));}
+      if(req.method==='POST'&&url.pathname==='/api/royalties/agreement/remove'){const input=await body(req);await db.updateRoyalties(state=>removeAgreement(state,input.id));return send(200,{ok:true});}
+      if(req.method==='POST'&&url.pathname==='/api/royalties/finalize'){
+        if(syncing||!paymentState.ready||syncError)return send(409,{error:'Wacht op een succesvolle synchronisatie inclusief betalingen voordat je een afrekening vaststelt.'});
+        const input=await body(req);const data=snapshot.data,at=paymentState.syncedAt;
+        return send(200,await db.updateRoyalties(state=>finalize(data,state,input,at)));
+      }
+      if(req.method==='POST'&&url.pathname==='/api/royalties/paid'){const input=await body(req);return send(200,await db.updateRoyalties(state=>markPaid(state,input.id,input.date,input.reference)));}
+      if(req.method==='GET'&&url.pathname==='/api/royalties/settlement-export'){
+        const state=await db.getRoyalties(),s=state.settlements.find(s=>s.id===url.searchParams.get('id'));if(!s)return send(404,{error:'Afrekening niet gevonden.'});
+        res.setHeader('Content-Disposition','attachment; filename="sonoskills-afrekening.csv"');return send(200,settlementCsv(s),'text/csv; charset=utf-8');
+      }
+      return send(404,{error:'Niet gevonden'});
     }
     if(['/api/analytics','/api/export'].includes(url.pathname) && req.method==='GET') {
       const filters=Object.fromEntries(url.searchParams);
@@ -74,7 +104,7 @@ const server=http.createServer(async(req,res)=>{
       return send(200,result);
     }
     return send(404,{error:'Niet gevonden'});
-  } catch(e){console.error('Request failed:',e.name);send(500,{error:'Het verzoek kon niet worden verwerkt.'});}
+  } catch(e){if(e instanceof InputError)return send(400,{error:e.message});console.error('Request failed:',e.name);send(500,{error:'Het verzoek kon niet worden verwerkt.'});}
 });
 server.listen(Number(process.env.PORT||3000),'0.0.0.0',()=>console.log('SonoSkills dashboard gestart'));
 const minutes=Math.max(15,Number(process.env.SYNC_INTERVAL_MINUTES)||60);

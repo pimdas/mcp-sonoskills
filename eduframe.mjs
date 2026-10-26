@@ -10,7 +10,9 @@ export const resources = {
   invoices: ['id','order_id','number','status','currency','total_excl','total_incl','total_open','opened_at','created_at']
 };
 export async function fetchResource(resource, token, fetcher=fetch, pause=ms=>new Promise(r=>setTimeout(r,ms))) {
-  if (!Object.hasOwn(resources,resource)) throw Error('Onbekende databron');
+  const paymentPath=/^invoices\/\d+\/payments$/.test(resource);
+  if (!Object.hasOwn(resources,resource)&&!paymentPath) throw Error('Onbekende databron');
+  const fields=paymentPath?['id','invoice_id','amount','currency','status','date']:resources[resource];
   let next = new URL(`${resource}?per_page=100`,root), result=[], seen=new Set();
   while(next) {
     if(next.origin!==new URL(root).origin || !next.pathname.startsWith('/api/v1/')) throw Error('Ongeldige paginaverwijzing');
@@ -29,7 +31,7 @@ export async function fetchResource(resource, token, fetcher=fetch, pause=ms=>ne
     if(!response.ok) throw Error(`Eduframe ${resource}: HTTP ${response.status}`);
     const rows=await response.json();
     if(!Array.isArray(rows) || rows.some(r=>!Number.isInteger(r.id))) throw Error(`Onverwacht antwoord voor ${resource}`);
-    result.push(...rows.map(row=>Object.fromEntries(resources[resource].filter(k=>row[k]!==undefined).map(k=>[k,row[k]]))));
+    result.push(...rows.map(row=>Object.fromEntries(fields.filter(k=>row[k]!==undefined).map(k=>[k,row[k]]))));
     const link=response.headers.get('link')||'';
     const href=link.split(',').map(s=>s.match(/<([^>]+)>;\s*rel="next"/)).find(Boolean)?.[1];
     next=href ? new URL(href,root) : null;

@@ -17,6 +17,29 @@ test('HTTP authentication, CSRF protection, logout, empty data and CSV',async()=
   assert.equal((await fetch(url+'/api/export',{headers:{cookie}})).status,200);
   const forged=cookie.slice(0,-1)+(cookie.endsWith('0')?'1':'0');assert.equal((await fetch(url+'/api/analytics',{headers:{cookie:forged}})).status,401);
   assert.equal((await fetch(url+'/api/sync',{method:'POST',headers:{cookie,'Content-Type':'application/json','X-Requested-With':'SonoSkills'},body:'{}'})).status,409);
+  assert.equal((await fetch(url+'/api/royalties/finalize',{method:'POST',headers:{cookie,'Content-Type':'application/json','X-Requested-With':'SonoSkills'},body:'{}'})).status,409);
   const logout=await fetch(url+'/api/logout',{method:'POST',headers:{cookie,'Content-Type':'application/json','X-Requested-With':'SonoSkills'},body:'{}'});assert.ok(logout.headers.get('set-cookie').includes('Max-Age=0'));
  }finally{child.kill('SIGTERM');await once(child,'exit');}
+});
+test('royalty routes persist agreements, enforce payment readiness and preserve settled amounts',async()=>{
+ const {mkdtemp,rm}=await import('node:fs/promises'),{tmpdir}=await import('node:os'),{join}=await import('node:path');
+ const dir=await mkdtemp(join(tmpdir(),'royalties-')),path=join(dir,'test.sqlite');
+ const {database}=await import('../db.mjs');process.env.SQLITE_PATH=path;
+ const db=await database();await db.put({syncedAt:'2026-02-01T12:00:00Z',paymentState:{ready:true,syncedAt:'2026-02-01T12:00:00Z'},data:{courses:[{id:1,name:'eLearning'}],planned_courses:[{id:10,course_id:1,type:'FlexiblePlannedCourse'}],orders:[{id:1,planned_course_id:10}],invoices:[{id:1,order_id:1,number:'TEST',status:'paid',currency:'EUR'}],payments:[{id:1,invoice_id:1,amount:'100.00',currency:'EUR',status:'paid',date:'2026-01-15'}]}});await db.close();
+ const child=spawn(process.execPath,['server.mjs'],{cwd:new URL('..',import.meta.url),env:{...process.env,NODE_ENV:'development',PORT:'3198',SQLITE_PATH:path,DATABASE_URL:'',EDUFRAME_API_TOKEN:'',ADMIN_EMAIL:'test@example.com',ADMIN_PASSWORD:'test-password-long-enough',SESSION_SECRET:'12345678901234567890123456789012'},stdio:['ignore','pipe','pipe']});
+ try{
+  await once(child.stdout,'data');const url='http://127.0.0.1:3198';
+  const base={'Content-Type':'application/json','X-Requested-With':'SonoSkills'};
+  assert.equal((await fetch(url+'/api/royalties')).status,401);
+  const login=await fetch(url+'/api/login',{method:'POST',headers:base,body:JSON.stringify({email:'test@example.com',password:'test-password-long-enough'})});const cookie=login.headers.get('set-cookie').split(';')[0];
+  const post=(path,data)=>fetch(url+path,{method:'POST',headers:{...base,cookie},body:JSON.stringify(data)});
+  assert.equal((await post('/api/royalties/agreement',{courseId:1,recipient:'Partner',percentage:'101',from:'2026-01-01'})).status,400);
+  const saved=await post('/api/royalties/agreement',{courseId:1,recipient:'Partner',percentage:'10',from:'2026-01-01'});assert.equal(saved.status,200);const a=await saved.json();
+  const query=await fetch(url+'/api/royalties?from=2026-01-01&to=2026-01-31',{headers:{cookie}});assert.equal((await query.json()).rows[0].dueCents,1000);
+  const input={from:'2026-01-01',to:'2026-01-31',partyId:a.partyId};const finalized=await post('/api/royalties/finalize',input);assert.equal(finalized.status,200);const s=await finalized.json();
+  assert.equal((await post('/api/royalties/finalize',input)).status,400);
+  const exported=await fetch(url+'/api/royalties/settlement-export?id='+s.id,{headers:{cookie}});assert.equal(exported.status,200);assert.ok((await exported.text()).includes('10.00'));
+  assert.equal((await post('/api/royalties/paid',{id:s.id,date:'2026-02-05',reference:'bank'})).status,200);
+  assert.equal((await post('/api/royalties/agreement/remove',{id:a.id})).status,400);
+ }finally{child.kill('SIGTERM');await once(child,'exit');await rm(dir,{recursive:true,force:true});}
 });

@@ -1,13 +1,14 @@
 const $=s=>document.querySelector(s);
 let status, lastSync=null;
 let workspace=new URL(location.href).searchParams.get('workspace')||'all';
-if(!['all','fixed','flexible'].includes(workspace))workspace='all';
+if(!['all','fixed','flexible','royalties'].includes(workspace))workspace='all';
 const opened=new Set();
 async function api(path,body){const r=await fetch(path,body!==undefined?{method:'POST',headers:{'Content-Type':'application/json','X-Requested-With':'SonoSkills'},body:JSON.stringify(body)}:{});const d=await r.json();if(r.status===401 && path!=='/api/login'){showLogin();throw Error('Log opnieuw in.');}if(!r.ok)throw Error(d.error||'Er ging iets mis.');return d;}
 function showLogin(){$('#login').hidden=false;$('#dashboard').hidden=true;}
 function element(tag,text,className){const el=document.createElement(tag);el.textContent=text;if(className)el.className=className;return el;}
 function params(){return new URLSearchParams([['workspace',workspace],...[...new FormData($('#filters'))].filter(([,v])=>v)]);}
 async function load(){
+  if(workspace==='royalties')return loadRoyalties();
   const d=await api('/api/analytics?'+params());
   for(const key of ['templates','editions','enrollments','returning'])$('#'+key).textContent=status?.syncedAt?d.metrics[key].toLocaleString('nl-NL'):'—';
   $('#occupancy').textContent=workspace==='flexible'?(status?.syncedAt?d.metrics.students.toLocaleString('nl-NL'):'—'):(d.metrics.occupancy==null?'—':d.metrics.occupancy+'%');
@@ -26,6 +27,7 @@ async function load(){
     details.addEventListener('toggle',()=>details.open?opened.add(template.id):opened.delete(template.id));
     const summary=element('summary',''),title=element('div','','template-name');title.append(element('strong',template.name),element('small',`Template #${template.id}${template.code?' · '+template.code:''}`));
     summary.append(title,element('span',`${template.editions.length} edities`,'badge'),element('span',`${template.participants} inschrijvingen`,'badge'));details.append(summary);
+    if(template.editions.some(e=>e.type==='flexible')){const action=element('button','Royaltyafspraak instellen','subtle royalty-template-action');action.type='button';action.onclick=async()=>{document.querySelector('[data-workspace=royalties]').click();await loadRoyalties();$('#royalty-agreement').elements.courseId.value=template.id;$('#royalty-agreement').scrollIntoView({behavior:'smooth',block:'center'});$('#royalty-agreement').elements.recipient.focus();};details.append(action);}
     const scroll=element('div','','table-scroll'),table=element('table',''),head=element('thead',''),heading=element('tr','');
     for(const text of ['Editie','Variant','Type','Locatie','Startdatum','Status','Deelnemers','Bezetting'])heading.append(element('th',text));head.append(heading);table.append(head);
     const body=element('tbody','');
@@ -49,7 +51,9 @@ $('#filters').onsubmit=async e=>{e.preventDefault();try{await load();$('#message
 $('#filters').onreset=()=>setTimeout(()=>load().catch(e=>$('#message').textContent=e.message),0);
 $('#export').onclick=()=>{window.location.href='/api/export?'+params();};
 function showWorkspace(){
-  const info={all:['Alle cursussen','Alle categorieën, templates en edities bij elkaar.'],fixed:['Vaste cursussen','Templates en edities met een vaste cursusdatum.'],flexible:['Flexibele cursussen','Templates en edities met een flexibele start, zoals online cursussen.']}[workspace];
+  for(const id of ['overview','courses'])$('#'+id).hidden=workspace==='royalties';
+  $('#royalties').hidden=workspace!=='royalties';
+  const info={royalties:['Royalties','Afspraken en afrekeningen over ontvangen eLearning-omzet.'],all:['Alle cursussen','Alle categorieën, templates en edities bij elkaar.'],fixed:['Vaste cursussen','Templates en edities met een vaste cursusdatum.'],flexible:['Flexibele cursussen','Templates en edities met een flexibele start, zoals online cursussen.']}[workspace];
   $('#workspace-title').textContent=info[0];$('#workspace-description').textContent=info[1];
   $('#from-label').textContent=workspace==='flexible'?'Geboekt vanaf':'Cursus start vanaf';
   $('#third-label').textContent=workspace==='flexible'?'Unieke deelnemers':'Gemiddelde bezetting';
@@ -62,6 +66,6 @@ for(const b of document.querySelectorAll('[data-workspace]'))b.onclick=async()=>
   const url=new URL(location.href);url.searchParams.set('workspace',workspace);history.pushState({},'',url);
   try{await load();}catch(e){$('#message').textContent=e.message;}
 };
-window.addEventListener('popstate',()=>{workspace=new URL(location.href).searchParams.get('workspace')||'all';if(!['all','fixed','flexible'].includes(workspace))workspace='all';showWorkspace();load().catch(e=>$('#message').textContent=e.message);});
+window.addEventListener('popstate',()=>{workspace=new URL(location.href).searchParams.get('workspace')||'all';if(!['all','fixed','flexible','royalties'].includes(workspace))workspace='all';showWorkspace();load().catch(e=>$('#message').textContent=e.message);});
 $('#filters').elements.category.onchange=()=>{$('#filters').elements.course.value='';};
 showWorkspace();refresh().then(load).catch(()=>showLogin());setInterval(()=>{if(!$('#dashboard').hidden)refresh().catch(e=>$('#message').textContent=e.message);},5000);

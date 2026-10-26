@@ -55,3 +55,19 @@ npm test
 ```
 
 Open http://localhost:3000. Zet nooit secrets of productiedata in Git. Backendtests gebruiken gemockte Eduframe-responses; een echte synchronisatie vereist een token. PostgreSQL en Railway-deployment moeten in de doelomgeving worden gecontroleerd.
+
+## Royalties voor eLearning
+
+De werkruimte Royalties beheert afspraken per template (alle edities/toegangsduurvarianten samen). Selecteer een template met minimaal één flexibele editie, een ontvanger, percentage (maximaal twee decimalen), ingangsdatum en optionele einddatum. Meerdere ontvangers zijn mogelijk. Afspraken voor dezelfde ontvanger en hetzelfde template mogen niet overlappen. De ingangsdatum wordt vergeleken met de betaaldatum.
+
+**Extra Eduframe-scope:** `payments:read`. De synchronisatie vraagt betaalrecords op via `GET /invoices/{invoice_id}/payments` voor facturen van templates met flexibele edities. Dit kan de eerste import aanzienlijk verlengen. Alle verzoeken blijven read-only en volgen dezelfde rate limit. Als de betaalimport faalt, worden de overige dashboardgegevens bijgewerkt en de vorige betaalgegevens bewaard met een zichtbare foutstatus. Vaststellen is dan geblokkeerd.
+
+De grondslag bestaat uitsluitend uit `paid`-betaalrecords, met hun geregistreerde `amount`, `currency` en `date`. Deelbetalingen vallen in hun eigen betaalperiode. De datum is de betaaldatum zoals Eduframe die levert; dit is geen onafhankelijke bankreconciliatie. Een terugbetaling corrigeert de grondslag alleen als deze in Eduframe als **negatieve betaalde betaling** is geregistreerd. Een creditnota of annulering zonder dergelijke betaling wordt niet automatisch als terugbetaling aangenomen. Controleer deze registratie bij de eerste echte afrekening.
+
+Facturen worden via orders en inschrijvingen aan één template gekoppeld; er wordt niet op basis van aantallen deelnemers verdeeld. Orders met meerdere templates worden niet automatisch toegerekend en krijgen, wanneer ze een royaltytemplate bevatten, een blokkerende melding. Het overzicht meldt ook het aantal facturen zonder unieke templatekoppeling. Deze facturen zijn uitgesloten; controleer eventuele handmatige of afwijkende orderkoppelingen in Eduframe. Verschillende valuta blijven gescheiden.
+
+Het conceptoverzicht is dynamisch en toont ontvangen, royalty, al vastgesteld en nog af te rekenen. Met begin/einddatum en één ontvanger kun je alle templates van die ontvanger vaststellen, ongeacht het templatefilter. De afrekening bevat de bronbetalingen, toenmalige namen en percentages, totalen en importsnapshotdatum. Dubbel afrekenen wordt voorkomen door per betaling/template/ontvanger/valuta/datum de al vastgestelde bedragen af te trekken. Latere wijzigingen leveren een correctie in de betreffende oorspronkelijke betaalperiode; open die periode opnieuw om deze af te rekenen. Vastgestelde afrekeningen worden niet herschreven. Afronding gebeurt op twee decimalen per template/ontvanger/valuta binnen de afrekening, na optelling van de ongeronde royaltybedragen.
+
+Na vaststellen is een afspraak beschermd: alleen een einddatum die reeds afgerekende betalingen niet uitsluit kan worden aangepast. Voor een nieuw percentage sluit je de bestaande afspraak af en voeg je een nieuwe toe. Een ongebruikte afspraak kan worden bewerkt of verwijderd. Afrekeningen kunnen als betaald worden gemarkeerd met betaaldatum en referentie; dit voert **geen** bankbetaling uit. CSV-export is beschikbaar voor het overzicht en voor elke vastgestelde afrekening inclusief brondetails.
+
+Afspraken en afrekeningen staan in een aparte `royalty_state`-tabel en worden niet overschreven door Eduframe-imports. Mutaties gebruiken een database-transactie en, in PostgreSQL, een rijvergrendeling om gelijktijdig dubbel vaststellen te voorkomen. Maak ook van deze tabel back-ups. Controleer de eerste echte berekening tegen Eduframe voordat je erop afrekent.
