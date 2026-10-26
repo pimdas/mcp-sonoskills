@@ -34,7 +34,7 @@ export function analyze(data, filters={}, config={}) {
   const allEditionMap=new Map(all.map(e=>[e.id,e]));
   const ids=new Set(editions.map(x=>x.id));
   const enrollments=(data.enrollments||[]).filter(e=>ids.has(e.planned_course_id) && (!booking||inPeriod(allOrders.get(e.order_id)?.created_at||e.created_at)));
-  const active=enrollments.filter(e=>['active','completed'].includes(e.status));
+  const active=enrollments.filter(e=>['confirmed','active','completed'].includes(e.status));
   const linkedOrders=[...linked.values()].filter(link=>link.editionIds.size===1&&ids.has([...link.editionIds][0])&&(!booking||inPeriod(link.order.created_at))).map(link=>link.order);
   const orders=linkedOrders.filter(sellingOrder);
   const filteredOrderIds=new Set(linkedOrders.map(o=>o.id));
@@ -66,7 +66,7 @@ export function analyze(data, filters={}, config={}) {
   }
   for(const t of Object.values(totals)){t.invoiced/=100;t.open/=100;t.orderValue/=100;}
   const history=new Map();
-  for(const e of data.enrollments||[]) if(['active','completed'].includes(e.status)) {
+  for(const e of data.enrollments||[]) if(['confirmed','active','completed'].includes(e.status)) {
     const set=history.get(e.student_id)||new Set();set.add(e.planned_course_id);history.set(e.student_id,set);
   }
   const students=new Set(active.map(x=>x.student_id).filter(x=>x!=null));
