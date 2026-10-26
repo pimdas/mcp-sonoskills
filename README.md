@@ -107,3 +107,10 @@ Totale omzet wordt uitsluitend opgebouwd uit facturen; conceptfacturen tellen ni
 Facturen worden via hun order gekoppeld aan de editie, of rechtstreeks via `invoice_items.catalog_variant_id`. Zo kunnen handmatige facturen zonder orderkoppeling worden meegenomen als de factuurregel een herkenbare cursusvariant bevat. Bij meerdere edities moet de volledige factuur binnen de selectie passen; er wordt niet naar rato geschat verdeeld. Een factuur wordt maximaal één keer geteld. Externe cursussen blijven uitgesloten.
 
 Ontbrekende, onvolledige en deels buiten de selectie vallende factuurkoppelingen worden in een uitklapbaar overzicht vermeld met factuurnummer, factuurdatum, bedrag, openstaand bedrag en reden. Ze tellen niet mee in de getoonde omzet. De lijst met niet toegerekende facturen gebruikt de gekozen periode op factuurdatum, omdat de cursusdatum niet altijd vast te stellen is. Voor een online handmatige factuur zonder order wordt de factuurdatum gebruikt als boekingsdatum. De nieuwe factuurregelreferenties komen beschikbaar na synchronisatie.
+
+
+## Omzetcontrole per selectie
+
+Onder Financieel overzicht → Omzet onderbouwen staat per factuur of deze meetelt, plus het factuurbedrag, openstaand, orderreferentie en uitsluitingsreden. Dezelfde controle bevat de bijbehorende orders ter vergelijking; orderbedragen worden niet bij de omzet opgeteld. Met Omzetcontrole downloaden exporteer je deze onderbouwing inclusief filterinstellingen en synchronisatiedatum. De export is alleen na login beschikbaar via `/api/finance-export`.
+
+Bij een factuur die de geselecteerde editie raakt, blijven uitsluitingen zichtbaar ook wanneer de factuurdatum buiten de cursusperiode ligt. Volledig niet gekoppelde facturen worden uitsluitend binnen de gekozen factuurperiode als mogelijke ontbrekende koppelingen getoond; deze kunnen ook andere cursussen betreffen. De controle verandert de omzetdefinitie of toerekening niet. Nieuwe imports bewaren daarnaast de aantallen en stuksprijzen bij factuurregelreferenties, zodat verschillen met Eduframe kunnen worden nagelopen.

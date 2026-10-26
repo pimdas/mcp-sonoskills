@@ -16,6 +16,7 @@ test('HTTP authentication, CSRF protection, logout, empty data and CSV',async()=
   assert.equal(login.status,200);const cookie=login.headers.get('set-cookie').split(';')[0];
   const result=await fetch(url+'/api/analytics',{headers:{cookie}});assert.equal(result.status,200);assert.equal((await result.json()).rows.length,0);
   assert.equal((await fetch(url+'/api/export',{headers:{cookie}})).status,200);
+  assert.equal((await fetch(url+'/api/finance-export')).status,401);const auditExport=await fetch(url+'/api/finance-export',{headers:{cookie}});assert.equal(auditExport.status,200);assert.ok((await auditExport.text()).includes('Omzetcontrole SonoSkills'));
   const forged=cookie.slice(0,-1)+(cookie.endsWith('0')?'1':'0');assert.equal((await fetch(url+'/api/analytics',{headers:{cookie:forged}})).status,401);
   assert.equal((await fetch(url+'/api/sync',{method:'POST',headers:{cookie,'Content-Type':'application/json','X-Requested-With':'SonoSkills'},body:'{}'})).status,409);
   assert.equal((await fetch(url+'/api/royalties/finalize',{method:'POST',headers:{cookie,'Content-Type':'application/json','X-Requested-With':'SonoSkills'},body:'{}'})).status,409);

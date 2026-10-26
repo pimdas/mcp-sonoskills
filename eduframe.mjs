@@ -32,7 +32,7 @@ export async function fetchResource(resource, token, fetcher=fetch, pause=ms=>ne
     if(!response.ok) throw Error(`Eduframe ${resource}: HTTP ${response.status}`);
     const rows=await response.json();
     if(!Array.isArray(rows) || rows.some(r=>!Number.isInteger(r.id))) throw Error(`Onverwacht antwoord voor ${resource}`);
-    if(resource==='invoices')for(const row of rows)if(Array.isArray(row.invoice_items))row.invoice_items=row.invoice_items.map(item=>({id:item.id,catalog_variant_id:item.catalog_variant_id}));
+    if(resource==='invoices')for(const row of rows)if(Array.isArray(row.invoice_items))row.invoice_items=row.invoice_items.map(item=>({id:item.id,catalog_variant_id:item.catalog_variant_id,...(item.units!==undefined?{units:item.units}:{}),...(item.unit_price!==undefined?{unit_price:item.unit_price}:{})}));
     if(resource==='orders')for(const row of rows)if(Array.isArray(row.order_items))row.order_items=row.order_items.map(item=>({id:item.id}));
     result.push(...rows.map(row=>Object.fromEntries(fields.filter(k=>row[k]!==undefined).map(k=>[k,row[k]]))));
     const link=response.headers.get('link')||'';

@@ -42,3 +42,5 @@ input[type=checkbox],input[type=radio]{accent-color:var(--blue)}
 .bar::-webkit-progress-value{background:var(--light-blue);border-radius:6px}
 .bar::-moz-progress-bar{background:var(--light-blue);border-radius:6px}
 ::selection{background:var(--light-blue);color:var(--ink)}
+
+#finance-checks .template-card{margin-top:18px}#finance-checks .template-card>p,#finance-checks .template-card>button,#finance-checks .template-card>h3{margin:14px 16px}#finance-checks td:first-child{min-width:90px}
