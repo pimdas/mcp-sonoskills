@@ -53,7 +53,7 @@ $('#logout').onclick=async()=>{await api('/api/logout',{});showLogin();};
 $('#sync').onclick=async()=>{try{await api('/api/sync',{});await refresh();}catch(e){$('#message').textContent=e.message;}};
 $('#filters').onsubmit=async e=>{e.preventDefault();try{await load();$('#message').textContent='';}catch(err){$('#message').textContent=err.message;}};
 $('#filters').onreset=()=>setTimeout(()=>load().catch(e=>$('#message').textContent=e.message),0);
-$('#export').onclick=()=>{window.location.href='/api/export?'+params();};
+$('#export').onclick=()=>{if(!$('#filters').reportValidity())return;window.location.href='/api/export?'+params();};
 function showWorkspace(){
   for(const id of ['overview','courses'])$('#'+id).hidden=workspace==='royalties';
   $('#royalties').hidden=workspace!=='royalties';

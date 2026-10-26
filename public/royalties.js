@@ -45,9 +45,8 @@ function resetAgreement(){const f=$('#royalty-agreement');for(const k of ['cours
 $('#royalty-agreement').onsubmit=async e=>{e.preventDefault();const f=e.target,input=Object.fromEntries([...f.elements].filter(el=>el.name).map(el=>[el.name,el.value]));const b=e.submitter;b.disabled=true;try{await royaltyAction($('#agreement-message'),async()=>{await api('/api/royalties/agreement',input);resetAgreement();$('#agreement-message').textContent='Afspraak opgeslagen.';});}finally{b.disabled=false;}};
 $('#royalty-cancel-edit').onclick=()=>{resetAgreement();$('#agreement-message').textContent='';};
 $('#royalty-filters').onsubmit=e=>{e.preventDefault();royaltyAction($('#royalty-message'),async()=>{});};
-$('#royalty-export').onclick=()=>location.href='/api/royalties/export?'+royaltyParams();
+$('#royalty-export').onclick=()=>{if($('#royalty-filters').reportValidity())location.href='/api/royalties/export?'+royaltyParams();};
 $('#royalty-finalize').onclick=async e=>{const b=e.target;b.disabled=true;try{await royaltyAction($('#royalty-message'),async()=>{const input=Object.fromEntries(new FormData($('#royalty-filters')));await api('/api/royalties/finalize',input);$('#royalty-message').textContent='Afrekening vastgesteld en bewaard.';});}finally{b.disabled=!royaltyData?.payments.ready||!$('#royalty-filters').elements.partyId.value||royaltyData?.syncing||!!royaltyData?.warnings.length;}};
 $('#royalty-filters').addEventListener('change',()=>{ $('#royalty-finalize').disabled=true; }); // Apply first to review the selected party.
 $('#royalty-paid').onsubmit=async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;try{await api('/api/royalties/paid',Object.fromEntries(new FormData(e.target)));$('#royalty-paid-dialog').close();await loadRoyalties();}catch(err){$('#paid-message').textContent=err.message;}finally{b.disabled=false;}};
 $('#royalty-paid-cancel').onclick=()=>$('#royalty-paid-dialog').close();
-const initialYear=new Date().getFullYear();$('#royalty-filters').elements.from.value=`${initialYear}-01-01`;$('#royalty-filters').elements.to.value=`${initialYear}-12-31`;
