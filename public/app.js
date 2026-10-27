@@ -40,23 +40,24 @@ async function load(){
   pendingFilters={};
   const labels={active:'Actief',completed:'Afgerond',planned:'Gepland',canceled:'Geannuleerd'};
   const online=onlineWorkspace();
+  $('#editions-label').textContent=online?'Opties':'Cursusedities';
   $('#orders').closest('article').hidden=online;$('#bookedPlaces').closest('article').hidden=online;
   $('#occupancy').closest('article').hidden=online;$('#confirmed-editions-note').hidden=online;
   $('#enrollment-metric').hidden=!online;$('#enrollments').textContent=status?.syncedAt?d.metrics.enrollments.toLocaleString('nl-NL'):'—';
   $('#chart').closest('section').hidden=online;
-  $('#course-list-note').textContent=online?'Inschrijvingen worden direct geregistreerd voor de online cursus en opgeteld over alle edities.':'Verkocht: actieve en aangevraagde orders, opgeteld over alle edities van de cursus. Inschrijvingen geven aan dat de editie bevestigd is; ze tellen niet nogmaals als verkoop.';
+  $('#course-list-note').textContent=online?'Inschrijvingen worden direct geregistreerd voor de online cursus en opgeteld over alle opties.':'Verkocht: actieve en aangevraagde orders, opgeteld over alle edities van de cursus. Inschrijvingen geven aan dat de editie bevestigd is; ze tellen niet nogmaals als verkoop.';
   const listing=$('#workspace-template-groups');listing.replaceChildren();
   for(const template of d.templates){
     const details=element('details','','template-card');details.open=opened.has(template.id);
     details.addEventListener('toggle',()=>details.open?opened.add(template.id):opened.delete(template.id));
     const summary=element('summary',''),title=element('div','','template-name');title.append(element('strong',template.name),element('small',`${template.category} · Template #${template.id}${template.code?' · '+template.code:''}`));
     const onlineTemplate=['elearning','ondemand','live'].includes(template.workspace);
-    summary.append(title,element('span',`${template.editions.length} edities`,'badge'));
+    summary.append(title,element('span',`${template.editions.length} ${onlineTemplate?(template.editions.length===1?'optie':'opties'):(template.editions.length===1?'editie':'edities')}`,'badge'));
     if(onlineTemplate)summary.append(element('span',`${template.participants} inschrijvingen`,'badge'));
     else summary.append(element('span',`${template.orders} orders`,'badge'),element('span',template.unknownPlaces?'Aantal plaatsen onbekend':`${template.bookedPlaces} plaatsen`,'badge'));details.append(summary);
     if(template.workspace==='elearning'){const action=element('button','Royaltyafspraak instellen','subtle royalty-template-action');action.type='button';action.onclick=async()=>{document.querySelector('[data-workspace=royalties]').click();await loadRoyalties();$('#royalty-agreement').elements.courseId.value=template.id;$('#royalty-agreement').scrollIntoView({behavior:'smooth',block:'center'});$('#royalty-agreement').elements.recipient.focus();};details.append(action);}
     const scroll=element('div','','table-scroll'),table=element('table',''),head=element('thead',''),heading=element('tr','');
-    const columns=onlineTemplate?['Editie','Variant','Type','Startdatum','Einddatum','Status','Inschrijvingen']:['Editie','Variant','Type','Locatie','Startdatum','Einddatum','Status','Orders','Geboekte plaatsen','Cursus bevestigd','Inschrijvingen','Bezetting'];
+    const columns=onlineTemplate?['Optie','Variant','Type','Startdatum','Einddatum','Status','Inschrijvingen']:['Editie','Variant','Type','Locatie','Startdatum','Einddatum','Status','Orders','Geboekte plaatsen','Cursus bevestigd','Inschrijvingen','Bezetting'];
     for(const text of columns)heading.append(element('th',text));head.append(heading);table.append(head);
     const body=element('tbody','');
     for(const row of template.editions){const tr=element('tr','');
@@ -64,10 +65,10 @@ async function load(){
       const cells=[`#${row.id}`,row.variant,{fixed:'Vast',flexible:'Flexibel',unknown:'Onbekend'}[row.type],row.type==='flexible'&&row.location==='Onbekend'?'—':row.location,date,row.end?new Date(row.end.slice(0,10)+'T12:00:00').toLocaleDateString('nl-NL'):'—',labels[row.status]||row.status,row.orders,row.unknownPlaces?'—':row.bookedPlaces,row.confirmed?'Bevestigd':'Nog niet bevestigd',row.participants+(row.capacity&&row.type!=='flexible'?' / '+row.capacity:''),row.occupancy==null?'—':row.occupancy+'%'];
       for(const text of onlineTemplate?[cells[0],cells[1],cells[2],cells[4],cells[5],cells[6],row.participants]:cells)tr.append(element('td',text));body.append(tr);
     }
-    if(!template.editions.length){const tr=element('tr',''),td=element('td','Deze cursus heeft nog geen edities.');td.colSpan=columns.length;tr.append(td);body.append(tr);}
+    if(!template.editions.length){const tr=element('tr',''),td=element('td',onlineTemplate?'Deze cursus heeft nog geen opties.':'Deze cursus heeft nog geen edities.');td.colSpan=columns.length;tr.append(td);body.append(tr);}
     table.append(body);scroll.append(table);details.append(scroll);listing.append(details);
   }
-  if(!d.templates.length)listing.append(element('p',status?.syncedAt?'Geen cursussen met edities binnen deze selectie.':'Je cursussen en edities verschijnen na de eerste synchronisatie.'));
+  if(!d.templates.length)listing.append(element('p',status?.syncedAt?(online?'Geen cursussen met opties binnen deze selectie.':'Geen cursussen met edities binnen deze selectie.'):(online?'Je cursussen en opties verschijnen na de eerste synchronisatie.':'Je cursussen en edities verschijnen na de eerste synchronisatie.')));
   $('#finance').replaceChildren();for(const [currency,totals] of Object.entries(d.totals)){for(const [key,label] of [['orderValue','Orderwaarde'],['invoiced','Gefactureerd'],['open','Openstaand']]){const row=element('div','','finance-row');row.append(element('span',label),element('strong',totals[key]===null?'Nog niet beschikbaar':currency==='ONBEKEND'?totals[key]+' (valuta onbekend)':new Intl.NumberFormat('nl-NL',{style:'currency',currency}).format(totals[key])));$('#finance').append(row);}}
   if(!Object.keys(d.totals).length)$('#finance').append(element('p','Geen gekoppelde orders of facturen in deze selectie.'));
   $('#finance-checks').replaceChildren(...d.finance.warnings.map(w=>element('p',w,'royalty-warning')));
@@ -108,12 +109,12 @@ function showWorkspace(){
   $('#analysis-filters').hidden=!['analytics','social','newsletter'].includes(page);$('#social-page').hidden=!marketing;
   $('#overview').hidden=page!=='analytics'||workspace==='all';$('#home-dashboard').hidden=page!=='analytics'||workspace!=='all';
   for(const name of ['course','sort'])$('#filters').elements[name].closest('label').hidden=workspace==='all';$('#connections').hidden=page!=='sources';$('#royalties').hidden=page!=='royalties';
-  const info={royalties:['Royalties','Afspraken en afrekeningen over ontvangen eLearning-omzet.'],all:['Dashboard','De belangrijkste resultaten en omzetverdeling per werkruimte.'],handson:['Hands-on cursussen','Cursussen en edities uit de categorie Hands-on, met cursusdata en locaties.'],elearning:['Online · eLearning','Alle cursussen en toegangsduurvarianten uit de categorie eLearning.'],ondemand:['Online · On-demand SonoClasses','Flexibele edities uit On-demand en Live SonoClasses.'],live:['Online · Live SonoClasses','Vaste edities uit Live en On-demand SonoClasses.'],products:['Producten','Alle cursussen uit de categorie Producten.'],external:['Extern','Partnercursussen voor planning, cursusedata en locaties; zonder omzetoverzicht.'],other:['Overige cursussen','Cursussen die nog niet aan een werkruimte zijn gekoppeld.']}[workspace];
+  const info={royalties:['Royalties','Afspraken en afrekeningen over ontvangen eLearning-omzet.'],all:['Dashboard','De belangrijkste resultaten en omzetverdeling per werkruimte.'],handson:['Hands-on cursussen','Cursussen en edities uit de categorie Hands-on, met cursusdata en locaties.'],elearning:['Online · eLearning','Alle cursussen en toegangsduurvarianten uit de categorie eLearning.'],ondemand:['Online · On-demand SonoClasses','Flexibele opties uit On-demand en Live SonoClasses.'],live:['Online · Live SonoClasses','Opties met een vaste datum uit Live en On-demand SonoClasses.'],products:['Producten','Alle cursussen uit de categorie Producten.'],external:['Extern','Partnercursussen voor planning, cursusedata en locaties; zonder omzetoverzicht.'],other:['Overige cursussen','Cursussen die nog niet aan een werkruimte zijn gekoppeld.']}[workspace];
   $('#workspace-title').textContent=marketing?({social:'Marketing · Social media',newsletter:'Marketing · Nieuwsbrief',reviews:'Marketing · Reviews'})[page]:page==='sources'?'Databronnen':info[0];$('#workspace-description').textContent=marketing?({social:'Volgers, groei, posts en interacties van SonoSkills.',newsletter:'De SonoSkills- en Free Webinar-groepen in MailerLite.',reviews:'Het aantal Google-beoordelingen en de gemiddelde sterrenscore.'})[page]:page==='sources'?'Eduframe-koppeling en categorie-indeling beheren.':info[1];
   $('#from-label').textContent=marketing?'Vanaf':bookingWorkspace()?'Geboekt vanaf':'Cursus start vanaf';
   $('#third-label').textContent=bookingWorkspace()?'Bevestigde edities':'Boekingsbezetting';
   $('#third-description').textContent=bookingWorkspace()?'Met bevestigde inschrijvingen':'Geboekte plaatsen / capaciteit';
-  $('#period-note').textContent=workspace==='external'?'Externe cursussen worden apart getoond en tellen niet mee in het eigen omzetoverzicht. Periode: startdatum van de editie.':bookingWorkspace()?'Periode: boekingsdatum. Cursussen en edities blijven zichtbaar; aantallen en facturen horen bij orders uit deze boekingsperiode.':'Periode: startdatum van de editie. Bij een datumselectie vallen edities zonder startdatum buiten de selectie.';
+  $('#period-note').textContent=online?(bookingWorkspace()?'Periode: boekingsdatum. Cursussen en opties blijven zichtbaar; aantallen en facturen horen bij orders uit deze periode.':'Periode: startdatum van de optie. Bij een datumselectie vallen opties zonder startdatum buiten de selectie.'):workspace==='external'?'Externe cursussen worden apart getoond en tellen niet mee in het eigen omzetoverzicht. Periode: startdatum van de editie.':bookingWorkspace()?'Periode: boekingsdatum. Cursussen en edities blijven zichtbaar; aantallen en facturen horen bij orders uit deze boekingsperiode.':'Periode: startdatum van de editie. Bij een datumselectie vallen edities zonder startdatum buiten de selectie.';
   for(const a of document.querySelectorAll('[data-page]')){a.classList.toggle('selected',a.dataset.page===page);if(a.dataset.page===page)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current');}
   for(const b of document.querySelectorAll('[data-workspace]')){b.classList.toggle('selected',(page==='analytics'||page==='royalties')&&b.dataset.workspace===workspace);b.setAttribute('aria-pressed',String((page==='analytics'||page==='royalties')&&b.dataset.workspace===workspace));}
 }
