@@ -73,3 +73,5 @@ aside{padding:28px 18px 20px;gap:0}.nav-label{margin:28px 12px 10px}.workspace-n
 .website-page>.panel{margin-top:18px}.website-page>.metrics{grid-template-columns:repeat(3,minmax(0,1fr));margin-top:18px}.website-page .metrics strong{margin:12px 0}.website-page td{padding:12px}.website-page details{margin-top:14px}.website-page td:nth-child(2){overflow-wrap:anywhere}@media(max-width:700px){.website-page>.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}#marketing-links{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
 .social-platform-heading{display:flex;align-items:center;gap:11px}.social-platform-icon{display:inline-flex;align-items:center;justify-content:center;flex:0 0 34px;width:34px;height:34px;border-radius:9px;color:white}.social-platform-icon svg{width:23px;height:23px;display:block}.social-platform-facebook{background:#1877f2}.social-platform-instagram{background:linear-gradient(35deg,#f9ce34,#ee2a7b 55%,#6228d7)}.social-platform-linkedin{background:#0a66c2}
+
+.reviews-embed{display:block;border:0;width:100%;height:360px;min-height:180px;background:white}.marketing-grid:has(.reviews-embed){grid-template-columns:1fr}

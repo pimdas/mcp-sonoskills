@@ -59,7 +59,7 @@ async function sync() {
     await db.put(next);snapshot=next;paymentState=nextPaymentState;
   }catch(e){syncError=e.message;console.error('Synchronisatie mislukt:',e.message);}finally{syncing=false;}
 }
-const assets={'/website.js':['website.js','text/javascript; charset=utf-8'],'/social.js':['social.js','text/javascript; charset=utf-8'],'/fonts/campton-extrabold.woff':['fonts/campton-extrabold.woff','font/woff'],'/periods.js':['periods.js','text/javascript; charset=utf-8'],'/royalties.js':['royalties.js','text/javascript; charset=utf-8'],'/':['index.html','text/html; charset=utf-8'],'/app.js':['app.js','text/javascript; charset=utf-8'],'/style.css':['style.css','text/css; charset=utf-8']};
+const assets={'/reviews-embed.js':['reviews-embed.js','text/javascript; charset=utf-8'],'/website.js':['website.js','text/javascript; charset=utf-8'],'/social.js':['social.js','text/javascript; charset=utf-8'],'/fonts/campton-extrabold.woff':['fonts/campton-extrabold.woff','font/woff'],'/periods.js':['periods.js','text/javascript; charset=utf-8'],'/royalties.js':['royalties.js','text/javascript; charset=utf-8'],'/':['index.html','text/html; charset=utf-8'],'/app.js':['app.js','text/javascript; charset=utf-8'],'/style.css':['style.css','text/css; charset=utf-8']};
 const server=http.createServer(async(req,res)=>{
   const send=(status,data,type='application/json; charset=utf-8')=>{res.writeHead(status,{'Content-Type':type});res.end(type.startsWith('application/json')?JSON.stringify(data):data);};
   res.setHeader('Cache-Control','no-store');res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('X-Frame-Options','DENY');res.setHeader('Referrer-Policy','same-origin');
@@ -98,6 +98,13 @@ const server=http.createServer(async(req,res)=>{
       res.writeHead(303,{Location:'/data-sources?exact=connected'});return res.end();
     }
     if(!session(req))return send(401,{error:'Log in om verder te gaan.'});
+    if(url.pathname==='/api/marketing/reviews/embed'&&req.method==='GET'){
+      res.setHeader('X-Frame-Options','SAMEORIGIN');
+      res.setHeader('Referrer-Policy','no-referrer');
+      res.setHeader('Content-Security-Policy',"default-src 'none'; script-src 'self' https://elfsightcdn.com https://*.elfsightcdn.com https://*.elfsight.com 'unsafe-inline'; connect-src https://elfsightcdn.com https://*.elfsightcdn.com https://*.elfsight.com; style-src 'unsafe-inline' https:; img-src https: data:; font-src https: data:; frame-src https:; frame-ancestors 'self'; base-uri 'none'; form-action 'none'");
+      return send(200,await readFile(new URL('./public/reviews-embed.html',import.meta.url)),'text/html; charset=utf-8');
+    }
+
     if(url.pathname==='/api/exact/connect'&&req.method==='POST'){
       const config=exactConfig();if(!config.clientId||!config.clientSecret)return send(409,{error:'Voeg EXACT_CLIENT_ID en EXACT_CLIENT_SECRET toe in Railway.'});
       const nonce=randomBytes(32).toString('hex'),expires=Date.now()+10*60e3,value=`${expires}.${nonce}`;

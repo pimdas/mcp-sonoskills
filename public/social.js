@@ -36,12 +36,12 @@ async function loadSocial(section='social'){
 }
 
 async function loadMarketingReviews(panel){
- try{const d=await api('/api/marketing/reviews');panel.replaceChildren(element('h2','Google Reviews'));
- if(!d.configured){panel.append(element('p','Nog niet gekoppeld. Koppel de SonoSkills-vermelding via Databronnen.','note'));return;}
- if(d.error){panel.append(element('p',d.error,'royalty-warning'));return;}
- const metrics=element('div','','metrics');for(const [label,value] of [['Gemiddelde beoordeling',d.rating==null?'—':d.rating.toLocaleString('nl-NL',{minimumFractionDigits:1,maximumFractionDigits:1})+' / 5 ★'],['Aantal beoordelingen',d.count.toLocaleString('nl-NL')]]){const card=element('article','');card.append(element('div',label),element('strong',value));metrics.append(card);}panel.append(metrics);
- const source=element('a','Google Maps','google-attribution');source.href=d.url;source.target='_blank';source.rel='noopener noreferrer';source.setAttribute('translate','no');panel.append(source);
- for(const a of d.attributions||[]){const credit=element(a.url?'a':'span',a.name,'note');if(a.url){credit.href=a.url;credit.target='_blank';credit.rel='noopener noreferrer';}panel.append(credit);}
- panel.append(element('p','Actuele stand · '+new Date(d.checkedAt).toLocaleString('nl-NL'),'note'));
- }catch{panel.replaceChildren(element('h2','Google Reviews'),element('p','Google Reviews kon niet worden geladen.','note'));}
+ panel.replaceChildren(element('h2','Google Reviews'));
+ const frame=element('iframe','','reviews-embed');frame.title='SonoSkills Google Reviews via Elfsight';frame.id='reviews-embed';frame.setAttribute('sandbox','allow-scripts allow-popups allow-popups-to-escape-sandbox');frame.setAttribute('referrerpolicy','no-referrer');frame.src='/api/marketing/reviews/embed';panel.append(frame);
+ panel.append(element('p','Bijgewerkt via Elfsight. Nieuwe beoordelingen kunnen vertraagd verschijnen.','note'));
 }
+window.addEventListener('message',event=>{
+ const frame=document.getElementById('reviews-embed');
+ if(!frame||event.source!==frame.contentWindow||event.origin!=='null'||event.data?.type!=='sonoskills-review-height'||!Number.isFinite(event.data.height))return;
+ frame.style.height=Math.max(180,Math.min(1800,event.data.height))+'px';
+});
