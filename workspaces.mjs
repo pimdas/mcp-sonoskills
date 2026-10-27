@@ -23,3 +23,8 @@ export function validateMapping(mapping,data){
  for(const d of definitions){if(!Object.hasOwn(mapping,d.id))continue;const list=mapping[d.id];if(!Array.isArray(list)||list.some(id=>!Number.isInteger(id)||!ids.has(id)))throw Error('Kies bestaande Eduframe-categorieën.');for(const id of list){if(used.has(id))throw Error('Een categorie kan niet aan twee werkruimtes worden gekoppeld.');used.add(id);}result[d.id]=[...new Set(list)];}
  return result;
 }
+
+export function externalSubcategories(data,config={}){
+ const categories=data.categories||[],index=workspaceIndex(data,config),roots=new Set(index.mapping.external),byId=new Map(categories.map(c=>[c.id,c]));
+ return categories.filter(c=>{if(roots.has(c.id))return false;let parent=c.parent_id,seen=new Set([c.id]);while(parent!=null&&!seen.has(parent)){if(roots.has(parent))return true;seen.add(parent);parent=byId.get(parent)?.parent_id;}return false;}).map(c=>({id:String(c.id),name:index.path(c.id)})).sort((a,b)=>a.name.localeCompare(b.name));
+}

@@ -28,3 +28,4 @@ test('SonoClasses split fixed and flexible editions regardless of which SonoClas
   assert.deepEqual(live.rows.map(r=>r.id),[31]);assert.deepEqual(on.rows.map(r=>r.id),[32]);assert.equal(live.templates[0].id,on.templates[0].id);assert.equal(live.metrics.enrollments,1);assert.equal(on.metrics.enrollments,1);assert.equal(live.totals.EUR.invoiced,170);assert.equal(on.totals.EUR.invoiced,20);assert.equal(analyze(d).rows.length,2);
  }
 });
+test('external subcategories follow configured roots and include nested categories only',async()=>{const {externalSubcategories}=await import('../workspaces.mjs');const d=fixture();d.categories.push({id:11,name:'Partner A',parent_id:9},{id:12,name:'Anders',parent_id:1});const names=externalSubcategories(d);assert.deepEqual(names.map(c=>c.id),['9','11']);assert.ok(!names.some(c=>['7','12'].includes(c.id)));assert.deepEqual(externalSubcategories(d,{external:[1]}).map(c=>c.id),['12']);});
