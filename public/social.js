@@ -1,3 +1,12 @@
+function socialPlatformIcon(platform){
+ const ns='http://www.w3.org/2000/svg',badge=element('span','','social-platform-icon social-platform-'+platform),svg=document.createElementNS(ns,'svg');
+ svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('aria-hidden','true');svg.setAttribute('focusable','false');
+ const add=(tag,attrs)=>{const n=document.createElementNS(ns,tag);for(const [k,v] of Object.entries(attrs))n.setAttribute(k,v);svg.append(n);};
+ if(platform==='facebook')add('path',{fill:'currentColor',d:'M13.5 22v-9h3l.5-3.5h-3.5V7.25c0-1 .3-1.75 1.8-1.75H17V2.3c-.5-.1-1.4-.3-2.7-.3-2.8 0-4.8 1.7-4.8 4.9v2.6H6.5V13h3v9z'});
+ if(platform==='instagram'){add('rect',{x:3,y:3,width:18,height:18,rx:5,fill:'none',stroke:'currentColor','stroke-width':2});add('circle',{cx:12,cy:12,r:4,fill:'none',stroke:'currentColor','stroke-width':2});add('circle',{cx:17.5,cy:6.5,r:1.2,fill:'currentColor'});}
+ if(platform==='linkedin'){add('circle',{cx:5,cy:5,r:2,fill:'currentColor'});add('path',{fill:'currentColor',d:'M3.25 8h3.5v13h-3.5zM9 8h3.4v1.8c.7-1.3 1.9-2.1 3.6-2.1 3.4 0 4.5 2.2 4.5 5.4V21H17v-7.1c0-1.8-.3-3-2-3-1.9 0-2.5 1.4-2.5 3V21H9z'});}
+ badge.append(svg);badge.setAttribute('aria-hidden','true');return badge;
+}
 async function loadSocial(section='social'){
  const root=$('#social-page');root.replaceChildren();root.className='marketing-page';root.classList.toggle('newsletter-page',section==='newsletter');
  const layout=element('div','','marketing-grid');root.append(layout);
@@ -8,7 +17,7 @@ async function loadSocial(section='social'){
  if(d.error)root.append(element('p',d.error,'royalty-warning'));if(d.syncing)root.append(element('p','Facebook en Instagram worden gesynchroniseerd…','note'));
  const number=n=>n==null?'Niet beschikbaar':n.toLocaleString('nl-NL');
  const table=(headers,rows)=>{const scroll=element('div','','table-scroll'),t=element('table',''),head=element('thead',''),tr=element('tr','');headers.forEach(h=>tr.append(element('th',h)));head.append(tr);t.append(head);const body=element('tbody','');for(const cells of rows){const row=element('tr','');for(const c of cells){const td=element('td','');if(c instanceof Node)td.append(c);else td.textContent=c;row.append(td);}body.append(row);}t.append(body);scroll.append(t);return scroll;};
- for(const a of d.accounts){const panel=element('section','','panel');panel.append(element('h2',({facebook:'Facebook',instagram:'Instagram',linkedin:'LinkedIn'})[a.platform]+(a.name?' · '+a.name:'')));layout.append(panel);
+ for(const a of d.accounts){const panel=element('section','','panel');const heading=element('h2','','social-platform-heading');heading.append(socialPlatformIcon(a.platform),element('span',({facebook:'Facebook',instagram:'Instagram',linkedin:'LinkedIn'})[a.platform]+(a.name?' · '+a.name:'')));panel.append(heading);layout.append(panel);
  if(!a.configured){panel.append(element('p',a.platform==='linkedin'?'Nog niet gekoppeld. LinkedIn vereist aparte API-toegang.':'Nog niet gekoppeld. Controleer de META-variabelen bij Databronnen.'));continue;}
  if(a.error)panel.append(element('p',a.error,'royalty-warning'));
  if(!a.syncedAt){panel.append(element('p','Nog geen geslaagde synchronisatie.'));continue;}
