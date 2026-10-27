@@ -50,27 +50,27 @@ async function load(){
   $('#occupancy').closest('article').hidden=online||products;$('#confirmed-editions-note').hidden=online||products;
   $('#enrollment-metric').hidden=!online;$('#enrollments').textContent=status?.syncedAt?d.metrics.enrollments.toLocaleString('nl-NL'):'—';
   $('#chart').closest('section').hidden=online;
-  $('#course-list-note').textContent=online?'Inschrijvingen worden direct geregistreerd voor de online cursus en opgeteld over alle opties.':'Verkocht: actieve en aangevraagde orders, opgeteld over alle edities van de cursus. Inschrijvingen geven aan dat de editie bevestigd is; ze tellen niet nogmaals als verkoop.';
+  $('#course-list-note').textContent=products?'Verkopen tonen het aantal inschrijvingen per productoptie in de geselecteerde periode.':online?'Inschrijvingen worden direct geregistreerd voor de online cursus en opgeteld over alle opties.':'Verkocht: actieve en aangevraagde orders, opgeteld over alle edities van de cursus. Inschrijvingen geven aan dat de editie bevestigd is; ze tellen niet nogmaals als verkoop.';
   const listing=$('#workspace-template-groups');listing.replaceChildren();
   for(const template of d.templates){
     const details=element('details','','template-card');details.open=opened.has(template.id);
     details.addEventListener('toggle',()=>details.open?opened.add(template.id):opened.delete(template.id));
     const summary=element('summary',''),title=element('div','','template-name');title.append(element('strong',template.name),element('small',`${template.category} · Template #${template.id}${template.code?' · '+template.code:''}`));
-    const onlineTemplate=['elearning','ondemand','live'].includes(template.workspace);
-    summary.append(title,element('span',`${template.editions.length} ${onlineTemplate?(template.editions.length===1?'optie':'opties'):(template.editions.length===1?'editie':'edities')}`,'badge'));
+    const onlineTemplate=['elearning','ondemand','live'].includes(template.workspace),productTemplate=workspace==='products';
+    summary.append(title,element('span',`${template.editions.length} ${onlineTemplate||productTemplate?(template.editions.length===1?'optie':'opties'):(template.editions.length===1?'editie':'edities')}`,'badge'));
     if(onlineTemplate)summary.append(element('span',`${template.participants} inschrijvingen`,'badge'));
-    else summary.append(element('span',`${template.orders} orders`,'badge'),element('span',template.unknownPlaces?'Aantal plaatsen onbekend':`${template.bookedPlaces} plaatsen`,'badge'));details.append(summary);
+    else if(!productTemplate)summary.append(element('span',`${template.orders} orders`,'badge'),element('span',template.unknownPlaces?'Aantal plaatsen onbekend':`${template.bookedPlaces} plaatsen`,'badge'));details.append(summary);
     if(template.workspace==='elearning'){const action=element('button','Royaltyafspraak instellen','subtle royalty-template-action');action.type='button';action.onclick=async()=>{document.querySelector('[data-workspace=royalties]').click();await loadRoyalties();$('#royalty-agreement').elements.courseId.value=template.id;$('#royalty-agreement').scrollIntoView({behavior:'smooth',block:'center'});$('#royalty-agreement').elements.recipient.focus();};details.append(action);}
     const scroll=element('div','','table-scroll'),table=element('table',''),head=element('thead',''),heading=element('tr','');
-    const columns=onlineTemplate?['Optie','Variant','Type','Startdatum','Einddatum','Status','Inschrijvingen']:['Editie','Variant','Type','Locatie','Startdatum','Einddatum','Status','Orders','Geboekte plaatsen','Cursus bevestigd','Inschrijvingen','Bezetting'];
+    const columns=productTemplate?['Optie','Variant','Type','Locatie','Startdatum','Einddatum','Status','Verkopen']:onlineTemplate?['Optie','Variant','Type','Startdatum','Einddatum','Status','Inschrijvingen']:['Editie','Variant','Type','Locatie','Startdatum','Einddatum','Status','Orders','Geboekte plaatsen','Cursus bevestigd','Inschrijvingen','Bezetting'];
     for(const text of columns)heading.append(element('th',text));head.append(heading);table.append(head);
     const body=element('tbody','');
     for(const row of template.editions){const tr=element('tr','');
       const date=row.type==='flexible'?'Flexibele start':row.start?new Date(row.start.slice(0,10)+'T12:00:00').toLocaleDateString('nl-NL'):'Geen startdatum';
       const cells=[`#${row.id}`,row.variant,{fixed:'Vast',flexible:'Flexibel',unknown:'Onbekend'}[row.type],row.type==='flexible'&&row.location==='Onbekend'?'—':row.location,date,row.end?new Date(row.end.slice(0,10)+'T12:00:00').toLocaleDateString('nl-NL'):'—',labels[row.status]||row.status,row.orders,row.unknownPlaces?'—':row.bookedPlaces,row.confirmed?'Bevestigd':'Nog niet bevestigd',row.participants+(row.capacity&&row.type!=='flexible'?' / '+row.capacity:''),row.occupancy==null?'—':row.occupancy+'%'];
-      for(const text of onlineTemplate?[cells[0],cells[1],cells[2],cells[4],cells[5],cells[6],row.participants]:cells)tr.append(element('td',text));body.append(tr);
+      for(const text of productTemplate?[cells[0],cells[1],cells[2],cells[3],cells[4],cells[5],cells[6],row.participants]:onlineTemplate?[cells[0],cells[1],cells[2],cells[4],cells[5],cells[6],row.participants]:cells)tr.append(element('td',text));body.append(tr);
     }
-    if(!template.editions.length){const tr=element('tr',''),td=element('td',onlineTemplate?'Deze cursus heeft nog geen opties.':'Deze cursus heeft nog geen edities.');td.colSpan=columns.length;tr.append(td);body.append(tr);}
+    if(!template.editions.length){const tr=element('tr',''),td=element('td',productTemplate?'Dit product heeft nog geen opties.':onlineTemplate?'Deze cursus heeft nog geen opties.':'Deze cursus heeft nog geen edities.');td.colSpan=columns.length;tr.append(td);body.append(tr);}
     table.append(body);scroll.append(table);details.append(scroll);listing.append(details);
   }
   if(!d.templates.length)listing.append(element('p',status?.syncedAt?(online?'Geen cursussen met opties binnen deze selectie.':'Geen cursussen met edities binnen deze selectie.'):(online?'Je cursussen en opties verschijnen na de eerste synchronisatie.':'Je cursussen en edities verschijnen na de eerste synchronisatie.')));
