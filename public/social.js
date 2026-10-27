@@ -2,7 +2,7 @@ async function loadSocial(){
  const d=await api('/api/social?'+params()),root=$('#social-page');root.replaceChildren();root.classList.add('marketing-page');
  root.append(element('p','De periode geldt voor groei en gepubliceerde posts. Abonnees, volgers en Google-beoordelingen tonen de actuele stand.','note'));
  const layout=element('div','','marketing-grid');root.append(layout);
- if(d.newsletter){renderNewsletter(d.newsletter,layout);const panel=layout.lastElementChild;compactMarketingPanel(panel,'Groei, groepen en contactstatussen');}
+ if(d.newsletter){renderNewsletter(d.newsletter,layout);}
  const reviews=element('section','','panel review-panel');reviews.append(element('h2','Google Reviews'),element('p','Beoordelingen ophalen…','note'));layout.append(reviews);void loadMarketingReviews(reviews);
  root.append(element('p','Volgers zijn de actuele aantallen. Groei volgt dagelijkse metingen vanaf de koppeling. Posts worden geselecteerd op publicatiedatum; interacties zijn de actuele totalen op die posts, inclusief later ontvangen reacties.','note'));
  if(d.error)root.append(element('p',d.error,'royalty-warning'));if(d.syncing)root.append(element('p','Facebook en Instagram worden gesynchroniseerd…','note'));
@@ -26,10 +26,6 @@ async function loadSocial(){
  }
 }
 
-function compactMarketingPanel(panel,label){
- const children=[...panel.children],metrics=children.findIndex(n=>n.classList.contains('metrics'));if(metrics<0)return;
- const details=element('details','','marketing-details');details.append(element('summary',label));for(const child of children.slice(metrics+1))details.append(child);panel.append(details);
-}
 async function loadMarketingReviews(panel){
  try{const d=await api('/api/marketing/reviews');panel.replaceChildren(element('h2','Google Reviews'));
  if(!d.configured){panel.append(element('p','Nog niet gekoppeld. Koppel de SonoSkills-vermelding via Databronnen.','note'));return;}

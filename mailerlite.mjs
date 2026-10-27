@@ -35,10 +35,11 @@ export async function importNewsletter(token,fetcher=fetch,pause=ms=>new Promise
  return {counts,groups,groupsError,total:Object.values(counts).reduce((s,n)=>s+n,0),mode:'counts',syncedAt:new Date().toISOString()};
 }
 export function recordNewsletter(previous={},result,day=localDay()){
- const history=(previous.history||[]).filter(h=>h.day!==day);history.push({day,active:result.counts.active,total:result.total});history.sort((a,b)=>a.day.localeCompare(b.day));return {...result,history};
+ const history=(previous.history||[]).filter(h=>h.day!==day);history.push({day,active:result.counts.active,total:result.total,groups:(result.groups||[]).map(g=>({id:g.id,name:g.name,active:g.counts.active}))});history.sort((a,b)=>a.day.localeCompare(b.day));return {...result,history};
 }
 export function newsletterReport(state={},filters={}){
  const inPeriod=day=>(!filters.from||day>=filters.from)&&(!filters.to||day<=filters.to);
  const history=state.history||[],selected=history.filter(h=>inPeriod(h.day)),baseline=history.filter(h=>filters.from&&h.day<filters.from).at(-1)||selected[0],last=selected.at(-1);
- return {syncedAt:state.syncedAt||null,counts:state.counts||null,groups:state.groups??null,groupsError:state.groupsError||null,total:state.total??null,history:selected,baseline:baseline||null,netGrowth:baseline&&last&&baseline.day!==last.day?last.active-baseline.active:null};
+ const keyGroups=['SonoSkills','SonoSkills - Free Webinar'].map(name=>{const normalize=v=>v.trim().replace(/[–—]/g,'-').replace(/\s+/g,' ').toLowerCase();const matches=(state.groups||[]).filter(g=>normalize(g.name)===normalize(name));const group=matches.length===1?matches[0]:null;const points=group?history.flatMap(h=>{const g=h.groups?.find(g=>g.id===group.id);return g?[{day:h.day,active:g.active}]:[];}):[];const selected=points.filter(h=>inPeriod(h.day)),baseline=points.filter(h=>filters.from&&h.day<filters.from).at(-1)||selected[0],last=selected.at(-1);return {name,group,history:selected,baseline:baseline||null,netGrowth:baseline&&last&&baseline.day!==last.day?last.active-baseline.active:null};});
+ return {keyGroups,syncedAt:state.syncedAt||null,counts:state.counts||null,groups:state.groups??null,groupsError:state.groupsError||null,total:state.total??null,history:selected,baseline:baseline||null,netGrowth:baseline&&last&&baseline.day!==last.day?last.active-baseline.active:null};
 }

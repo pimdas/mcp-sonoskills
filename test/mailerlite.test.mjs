@@ -11,3 +11,12 @@ test('group totals use aggregate fields, include all pages, and do not alter uni
  assert.equal(groupCalls,2);assert.equal(r.total,50);assert.deepEqual(r.groups.map(g=>g.name),['Large','Small']);assert.equal(r.groups[0].total,15);assert.equal(newsletterReport(r).groups.length,2);
 });
 test('group pagination cannot send credentials to an external host and count data remains available',async()=>{let requests=0;const r=await importNewsletter('secret',async url=>{requests++;return new Response(new URL(url).pathname==='/api/subscribers'?'{"total":1}':JSON.stringify({data:[],links:{next:'https://evil.example/api/groups'}}));},async()=>{});assert.equal(requests,6);assert.equal(r.total,5);assert.equal(r.groups,null);assert.match(r.groupsError,/paginering/);});
+test('key group growth uses daily group identity and never total-database history',()=>{
+ const group=(id,name,active)=>({id,name,counts:{active},total:active});
+ const sample=groups=>({counts:{active:999},total:1000,groups,syncedAt:'now'});
+ let state=recordNewsletter({history:[{day:'2026-09-29',active:900,total:950}]},sample([group('a','SonoSkills',100),group('b','SonoSkills - Free Webinar',50),group('c','Other',20)]),'2026-09-30');
+ state=recordNewsletter(state,sample([group('a','SonoSkills',105),group('b','SonoSkills - Free Webinar',48),group('c','Other',21)]),'2026-10-01');
+ state=recordNewsletter(state,sample([group('a','SonoSkills',107),group('b','SonoSkills - Free Webinar',48)]),'2026-10-01');
+ const report=newsletterReport(state,{from:'2026-10-01',to:'2026-10-31'});assert.deepEqual(report.keyGroups.map(g=>g.netGrowth),[7,-2]);assert.equal(report.keyGroups[0].group.counts.active,107);assert.equal(report.keyGroups[0].history.length,1);
+ state.groups=[group('new','SonoSkills',1)];assert.equal(newsletterReport(state).keyGroups[0].netGrowth,null);assert.equal(newsletterReport(state).keyGroups[1].group,null);
+});

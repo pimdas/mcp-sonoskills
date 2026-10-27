@@ -177,22 +177,20 @@ function renderMonthlyRevenue(data,root,colors,money){
 }
 
 function renderNewsletter(n,root){
- const panel=element('section','','panel');panel.append(element('h2','Nieuwsbrief · MailerLite'));root.append(panel);
- if(!n.syncedAt){panel.append(element('p',n.error||(n.configured?'Actuele aantallen worden opgehaald. Je kunt de voortgang volgen onder Databronnen.':'Koppel MailerLite via Databronnen om abonnees en databasegroei te zien.')));return;}
- if(n.error)panel.append(element('p',n.error+' De laatst opgehaalde cijfers worden getoond.','royalty-warning'));
- const cards=element('div','','metrics');for(const [label,value] of [['Actieve abonnees · nu',n.counts.active],['Alle contacten · nu',n.total],['Netto groei actieve abonnees',n.netGrowth]]){const card=element('article','');card.append(element('div',label),element('strong',value===null?'Nog niet beschikbaar':value.toLocaleString('nl-NL')));cards.append(card);}panel.append(cards);
- panel.append(element('p','Actuele aantallen op '+new Date(n.syncedAt).toLocaleString('nl-NL')+'. Netto groei is het verschil tussen gemeten actieve aantallen'+(n.baseline?' vanaf '+n.baseline.day:'')+'. De metingen starten bij het koppelen; eerdere netto groei is niet bekend.','note'));
- const svgEl=(tag,attrs={},text)=>{const node=document.createElementNS('http://www.w3.org/2000/svg',tag);for(const [k,v] of Object.entries(attrs))node.setAttribute(k,v);if(text!==undefined)node.textContent=text;return node;};
- panel.append(element('h3','Groei van actieve abonnees'));
- const points=n.history;
- if(points.length<2)panel.append(element('p','Na metingen op twee verschillende dagen verschijnt hier de groeigrafiek.'));
- else{const svg=svgEl('svg',{viewBox:'0 0 950 290',role:'img','aria-label':'Actieve nieuwsbriefabonnees per gemeten dag'}),wrap=element('div','','monthly-chart');wrap.append(svg);panel.append(wrap);const start=Date.parse(points[0].day),end=Date.parse(points.at(-1).day),max=Math.max(1,...points.map(p=>p.active)),x=p=>80+820*(Date.parse(p.day)-start)/(end-start),y=p=>240-210*p.active/max;
- for(let i=0;i<=4;i++){const v=max*i/4,py=240-210*i/4;svg.append(svgEl('line',{x1:80,x2:900,y1:py,y2:py,stroke:'#cfe4ef'}),svgEl('text',{x:72,y:py+4,'text-anchor':'end',fill:'#466877','font-size':11},Math.round(v).toLocaleString('nl-NL')));}
- const line=points.map(p=>x(p)+','+y(p)).join(' ');svg.append(svgEl('polygon',{points:'80,240 '+line+' 900,240',fill:'#edf7fd'}),svgEl('polyline',{points:line,fill:'none',stroke:'#13638b','stroke-width':3}));points.forEach((p,i)=>{const dot=svgEl('circle',{cx:x(p),cy:y(p),r:4,fill:'#e98324'});dot.append(svgEl('title',{},p.day+': '+p.active.toLocaleString('nl-NL')+' actief'));svg.append(dot);if(i===0||i===points.length-1||i%Math.max(1,Math.ceil(points.length/8))===0)svg.append(svgEl('text',{x:x(p),y:265,'text-anchor':'middle','font-size':11,fill:'#466877'},p.day));});}
- panel.append(element('h3','Nieuwsbriefgroepen'),element('p','Actuele aantallen per MailerLite-groep. Een contact kan in meerdere groepen staan; de groepsaantallen tellen daarom niet op tot het unieke totaal.','note'));
- if(n.groupsError)panel.append(element('p',n.groupsError+' Synchroniseer MailerLite opnieuw om de groepen op te halen.','royalty-warning'));
- if(n.groups===null||n.groups===undefined)panel.append(element('p','De groepen verschijnen na de volgende MailerLite-synchronisatie.'));
- else if(!n.groups.length)panel.append(element('p','Geen groepen gevonden in MailerLite.'));
- else{const scroll=element('div','','table-scroll'),table=element('table',''),thead=element('thead',''),head=element('tr','');for(const title of ['Groep','Actief','Alle contacten','Uitgeschreven','Onbevestigd','Gebounced','Spam'])head.append(element('th',title));thead.append(head);table.append(thead);const body=element('tbody','');for(const group of n.groups){const row=element('tr','');row.append(element('td',group.name));for(const value of [group.counts.active,group.total,group.counts.unsubscribed,group.counts.unconfirmed,group.counts.bounced,group.counts.junk])row.append(element('td',value.toLocaleString('nl-NL')));body.append(row);}table.append(body);scroll.append(table);panel.append(scroll);}
- const details=element('details','');details.append(element('summary','Contactstatussen'));for(const [key,label] of [['active','Actief'],['unsubscribed','Uitgeschreven'],['unconfirmed','Onbevestigd'],['bounced','Gebounced'],['junk','Spam']])details.append(element('p',label+': '+n.counts[key].toLocaleString('nl-NL')));panel.append(details);
+ const panel=element('section','','panel newsletter-panel');panel.append(element('h2','Nieuwsbrief · MailerLite'));root.append(panel);
+ if(!n.syncedAt){panel.append(element('p',n.error||'Nog geen nieuwsbriefgegevens beschikbaar. Synchroniseer MailerLite via Databronnen.','note'));return;}
+ if(n.error)panel.append(element('p',n.error,'royalty-warning'));
+ if(n.groupsError)panel.append(element('p',n.groupsError,'royalty-warning'));
+ const number=v=>v==null?'Nog niet beschikbaar':v.toLocaleString('nl-NL');
+ const cards=element('div','','metrics newsletter-key-groups');
+ for(const key of n.keyGroups||[]){const card=element('article','');card.append(element('div',key.name),element('strong',number(key.group?.counts.active)),element('small','Actieve abonnees · nu'));card.append(element('p',key.group?'Groei in periode: '+(key.netGrowth>0?'+':'')+number(key.netGrowth):'Groep niet gevonden. Synchroniseer MailerLite.','note'));cards.append(card);}panel.append(cards);
+ panel.append(element('p','Bijgewerkt: '+new Date(n.syncedAt).toLocaleString('nl-NL')+'. Groepen kunnen overlappen; aantallen worden niet opgeteld.','note'));
+ const details=element('details','','marketing-details');details.append(element('summary','Groei, overige groepen en contactstatussen'));panel.append(details);
+ for(const key of n.keyGroups||[]){details.append(element('h3',key.name+' · groei'));if(key.netGrowth===null)details.append(element('p','Groei verschijnt na metingen op twee verschillende dagen. Eerdere groepshistorie is niet beschikbaar.','note'));else details.append(element('p','Netto groei: '+(key.netGrowth>0?'+':'')+number(key.netGrowth)+(key.baseline?' · gemeten vanaf '+key.baseline.day:'')+'.','note'));
+ if(key.history.length){const scroll=element('div','','table-scroll'),table=element('table',''),head=element('tr','');for(const title of ['Meetdatum','Actieve abonnees'])head.append(element('th',title));const thead=element('thead','');thead.append(head);table.append(thead);const body=element('tbody','');for(const h of key.history){const row=element('tr','');row.append(element('td',h.day),element('td',number(h.active)));body.append(row);}table.append(body);scroll.append(table);details.append(scroll);}}
+ const keyIds=new Set((n.keyGroups||[]).map(k=>k.group?.id).filter(Boolean)),others=(n.groups||[]).filter(g=>!keyIds.has(g.id));
+ details.append(element('h3','Overige groepen'));if(!others.length)details.append(element('p',n.groups?'Geen overige groepen.':'Groepen zijn nog niet beschikbaar.','note'));
+ for(const g of others)details.append(element('p',g.name+': '+number(g.counts.active)+' actief · '+number(g.total)+' contacten'));
+ const all=element('details','');all.append(element('summary','Gehele MailerLite-database'));all.append(element('p','Alle contacten: '+number(n.total)+' · Actieve abonnees: '+number(n.counts.active)));
+ for(const [key,label] of [['unsubscribed','Uitgeschreven'],['unconfirmed','Onbevestigd'],['bounced','Gebounced'],['junk','Spam']])all.append(element('p',label+': '+number(n.counts[key])));details.append(all);
 }
