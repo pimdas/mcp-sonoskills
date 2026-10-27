@@ -17,6 +17,8 @@ export function dashboard(data,filters={},config={},externalInvoices=[]){
  const cutoff=today<'2027-01-01'?today:'2026-12-31';
  const eligible=(data.invoices||[]).filter(i=>{const date=(i.opened_at||'').slice(0,10);return /^\d{4}-\d{2}-\d{2}$/.test(date)&&date<=cutoff;});
  const advance=financialOverview({...data,invoices:eligible},{ids,externalIds});
+ const editionMap=new Map((data.planned_courses||[]).map(e=>[e.id,e])),breakdownMap=new Map();
+ for(const invoice of advance.audit.invoices.filter(i=>i.counted)){const categories=new Set(invoice.editionIds.map(id=>{const edition=editionMap.get(id);return index.classifyEdition(edition,courses.get(edition?.course_id));}));const id=categories.size===1?[...categories][0]:'mixed';const name=groups.find(g=>g[0]===id)?.[1]||(id==='mixed'?'Meerdere categorieën':'Overige');const entry=breakdownMap.get(id)||{id,name,totals:{},invoiceCount:0};const total=entry.totals[invoice.currency]??={invoiced:0,open:0};total.invoiced=Math.round((total.invoiced+invoice.total)*100)/100;total.open=Math.round((total.open+invoice.open)*100)/100;entry.invoiceCount++;breakdownMap.set(id,entry);}
  const undated=invoiceIndex(data).filter(l=>l.invoice.status!=='concept'&&[...l.editionIds].some(id=>ids.has(id))&&!l.invoice.opened_at).length;
- return {workspaces,totals,monthly,advance2027:{totals:advance.totals,invoiceCount:advance.invoiceCount||0,cutoff,unallocated:advance.unallocated.filter(i=>advance.audit.invoices.find(a=>a.id===i.id)?.editionIds.some(id=>ids.has(id))).length,undated}};
+ return {workspaces,totals,monthly,advance2027:{totals:advance.totals,breakdown:[...breakdownMap.values()],invoiceCount:advance.invoiceCount||0,cutoff,unallocated:advance.unallocated.filter(i=>advance.audit.invoices.find(a=>a.id===i.id)?.editionIds.some(id=>ids.has(id))).length,undated}};
 }
