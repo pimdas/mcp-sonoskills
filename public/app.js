@@ -42,9 +42,12 @@ async function load(){
   pendingFilters={};
   const labels={active:'Actief',completed:'Afgerond',planned:'Gepland',canceled:'Geannuleerd'};
   const online=onlineWorkspace();
-  $('#editions-label').textContent=online?'Opties':'Cursusedities';
-  $('#orders').closest('article').hidden=online;$('#bookedPlaces').closest('article').hidden=online;
-  $('#occupancy').closest('article').hidden=online;$('#confirmed-editions-note').hidden=online;
+  const products=workspace==='products';
+  $('#templates').closest('article').querySelector('div').textContent=products?'Producten':'Cursussen';
+  $('#templates').closest('article').querySelector('small').textContent=products?'Unieke producten in de selectie':'Unieke opleidingen in de selectie';
+  $('#editions-label').textContent=products?'Productopties':online?'Opties':'Cursusedities';
+  $('#orders').closest('article').hidden=online;$('#bookedPlaces').closest('article').hidden=online||products;
+  $('#occupancy').closest('article').hidden=online||products;$('#confirmed-editions-note').hidden=online||products;
   $('#enrollment-metric').hidden=!online;$('#enrollments').textContent=status?.syncedAt?d.metrics.enrollments.toLocaleString('nl-NL'):'—';
   $('#chart').closest('section').hidden=online;
   $('#course-list-note').textContent=online?'Inschrijvingen worden direct geregistreerd voor de online cursus en opgeteld over alle opties.':'Verkocht: actieve en aangevraagde orders, opgeteld over alle edities van de cursus. Inschrijvingen geven aan dat de editie bevestigd is; ze tellen niet nogmaals als verkoop.';
