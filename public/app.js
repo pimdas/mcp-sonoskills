@@ -84,7 +84,15 @@ $('#sync').onclick=async()=>{try{if(page==='social'){const requests=[];if(status
 $('#filters').onsubmit=async e=>{e.preventDefault();try{await load();saveFilterUrl();$('#message').textContent='';}catch(err){$('#message').textContent=err.message;}};
 $('#filters').onreset=()=>setTimeout(()=>{load().then(saveFilterUrl).catch(e=>$('#message').textContent=e.message);},0);
 $('#export').onclick=()=>{if(!$('#filters').reportValidity())return;window.location.href='/api/export?'+params();};
+let onlineMenuOpen=false;
+try{onlineMenuOpen=localStorage.getItem('sonoskills-online-menu')==='open';}catch{}
+function setOnlineMenu(open){
+ onlineMenuOpen=open;$('#online-toggle').setAttribute('aria-expanded',String(open));$('#online-links').hidden=!open;
+}
+$('#online-toggle').onclick=()=>{setOnlineMenu(!onlineMenuOpen);try{localStorage.setItem('sonoskills-online-menu',onlineMenuOpen?'open':'closed');}catch{}};
 function showWorkspace(){
+  setOnlineMenu((page==='analytics'&&onlineWorkspace())||onlineMenuOpen);
+  $('#online-toggle').classList.toggle('active-parent',page==='analytics'&&onlineWorkspace());
   const online=['elearning','ondemand','live'].includes(workspace);
   for(const key of ['category','location']){const select=$('#filters').elements[key];$('#'+key+'-filter').hidden=online||workspace==='all';select.disabled=online||workspace==='all';if(online){select.value='';delete pendingFilters[key];}}
 
