@@ -131,7 +131,7 @@ Social media heeft een eigen pagina `/social`, eigen permanente opslag en een on
 
 ## Marketing
 
-`/marketing` bundelt de nieuwsbrief en social media in compacte kaarten. `/social` blijft bruikbaar. Groei, nieuwsbriefgroepen en postdetails zijn uitklapbaar. De periode filtert groei en posts; actuele aantallen blijven actueel. Synchroniseren start de ingestelde Meta- en MailerLite-koppelingen onafhankelijk.
+`Marketing` is een uitklapbaar menu met `/marketing/social-media`, `/marketing/nieuwsbrief` en `/marketing/reviews`. `/social` en `/marketing` blijven bruikbaar als ingang naar Social media. Groei, nieuwsbriefgroepen en postdetails zijn uitklapbaar. De periode filtert groei en posts; actuele aantallen blijven actueel. Synchroniseren werkt per pagina: Meta bij Social media, MailerLite bij Nieuwsbrief en live vernieuwen bij Reviews.
 
 Voor Google Reviews: activeer **Places API (New)** met facturering in Google Cloud. Maak een server-key met API-restrictie voor Places API (New), stel een passend quotum en budgetmeldingen in, en configureer `GOOGLE_PLACES_API_KEY` plus `GOOGLE_PLACE_ID` van de juiste SonoSkills-vermelding in Railway. Gebruik bij vaste uitgaande IP-adressen ook IP-restricties. Vraag de Place ID op via Google's Place ID Finder. Google vereist een toepasselijke privacyverklaring en gebruiksvoorwaarden; zie https://developers.google.com/maps/documentation/places/web-service/policies.
 

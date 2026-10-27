@@ -1,9 +1,9 @@
-async function loadSocial(){
- const d=await api('/api/social?'+params()),root=$('#social-page');root.replaceChildren();root.classList.add('marketing-page');
- root.append(element('p','De periode geldt voor groei en gepubliceerde posts. Abonnees, volgers en Google-beoordelingen tonen de actuele stand.','note'));
+async function loadSocial(section='social'){
+ const root=$('#social-page');root.replaceChildren();root.classList.add('marketing-page');root.classList.toggle('newsletter-page',section==='newsletter');
  const layout=element('div','','marketing-grid');root.append(layout);
- if(d.newsletter){renderNewsletter(d.newsletter,layout);}
- const reviews=element('section','','panel review-panel');reviews.append(element('h2','Google Reviews'),element('p','Beoordelingen ophalen…','note'));layout.append(reviews);void loadMarketingReviews(reviews);
+ if(section==='reviews'){const panel=element('section','','panel review-panel');layout.append(panel);await loadMarketingReviews(panel);return;}
+ if(section==='newsletter'){const n=await api('/api/newsletter?'+params());renderNewsletter(n,layout);if(n.syncing)root.append(element('p','MailerLite wordt gesynchroniseerd…','note'));return;}
+ const d=await api('/api/social?'+params());
  root.append(element('p','Volgers zijn de actuele aantallen. Groei volgt dagelijkse metingen vanaf de koppeling. Posts worden geselecteerd op publicatiedatum; interacties zijn de actuele totalen op die posts, inclusief later ontvangen reacties.','note'));
  if(d.error)root.append(element('p',d.error,'royalty-warning'));if(d.syncing)root.append(element('p','Facebook en Instagram worden gesynchroniseerd…','note'));
  const number=n=>n==null?'Niet beschikbaar':n.toLocaleString('nl-NL');
