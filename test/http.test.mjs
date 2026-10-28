@@ -48,5 +48,10 @@ test('royalty routes persist agreements, enforce payment readiness and preserve 
   const exported=await fetch(url+'/api/royalties/settlement-export?id='+s.id,{headers:{cookie}});assert.equal(exported.status,200);assert.ok((await exported.text()).includes('10.00'));
   assert.equal((await post('/api/royalties/paid',{id:s.id,date:'2026-02-05',reference:'bank'})).status,200);
   assert.equal((await post('/api/royalties/agreement/remove',{id:a.id})).status,400);
+  const manual={courseId:1,sourceType:'reseller',sourceName:'123sonography gmbh',reference:'RES-1',from:'2026-01-01',to:'2026-01-31',amount:'200',currency:'EUR'};
+  const manualResponse=await post('/api/royalties/manual',manual);assert.equal(manualResponse.status,200);const manualEntry=await manualResponse.json();assert.equal(manualEntry.createdBy.email,'test@sonoskills.com');assert.equal((await post('/api/royalties/manual',manual)).status,400);
+  const withManual=await (await fetch(url+'/api/royalties?from=2026-01-01&to=2026-01-31',{headers:{cookie}})).json();assert.equal(withManual.rows[0].manualBase,20000);assert.equal(withManual.rows[0].dueCents,2000);assert.equal((await post('/api/royalties/finalize',input)).status,200);assert.equal((await post('/api/royalties/manual',{...manual,id:manualEntry.id,amount:'100'})).status,400);assert.equal((await post('/api/royalties/manual/remove',{id:manualEntry.id})).status,400);
+  assert.equal((await post('/api/royalties/manual',{...manual,correctsId:manualEntry.id,reference:'RES-1 correction',amount:'-50'})).status,200);const corrected=await (await fetch(url+'/api/royalties?from=2026-01-01&to=2026-01-31',{headers:{cookie}})).json();assert.equal(corrected.rows[0].dueCents,-500);
+
  }finally{child.kill('SIGTERM');await once(child,'exit');await rm(dir,{recursive:true,force:true});}
 });

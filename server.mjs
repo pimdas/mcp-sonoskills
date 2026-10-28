@@ -1,3 +1,4 @@
+import {saveManualRevenue,removeManualRevenue} from './manual-royalties.mjs';
 import {UserError,companyEmail,publicUser,bootstrapOwner,passwordHash,verifyPassword,createUser,manageUser,invitationUser,activateUser,sessionUser,newSession,removeSession} from './users.mjs';
 import {googleAdsConfig,googleAdsSetup,googleAdsReport,validateAdsSettings} from './google-ads.mjs';
 import {demographics,demographicResources} from './demographics.mjs';
@@ -157,6 +158,8 @@ const server=http.createServer(async(req,res)=>{
         if(url.pathname.endsWith('/export')){res.setHeader('Content-Disposition','attachment; filename="sonoskills-royalties.csv"');return send(200,reportCsv(r),'text/csv; charset=utf-8');}
         return send(200,{...r,payments:paymentsStatus(),syncing});
       }
+      if(req.method==='POST'&&url.pathname==='/api/royalties/manual'){const input=await body(req);return send(200,await db.updateRoyalties(state=>saveManualRevenue(state,input,snapshot.data,workspaceConfig,currentUser)));}
+      if(req.method==='POST'&&url.pathname==='/api/royalties/manual/remove'){const input=await body(req);return send(200,await db.updateRoyalties(state=>removeManualRevenue(state,input.id,currentUser)));}
       if(req.method==='POST'&&url.pathname==='/api/royalties/agreement'){const input=await body(req);return send(200,await db.updateRoyalties(state=>saveAgreement(state,input,snapshot.data,workspaceConfig)));}
       if(req.method==='POST'&&url.pathname==='/api/royalties/agreement/remove'){const input=await body(req);await db.updateRoyalties(state=>removeAgreement(state,input.id));return send(200,{ok:true});}
       if(req.method==='POST'&&url.pathname==='/api/royalties/finalize'){
