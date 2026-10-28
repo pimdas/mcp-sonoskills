@@ -1,5 +1,5 @@
 export async function database() {
-  let get, put, close, getRoyalties, updateRoyalties, getConfig, putConfig, getNewsletter, putNewsletter, getSocial, putSocial, getExact, putExact, getAdsSettings, putAdsSettings;
+  let get, put, close, getRoyalties, updateRoyalties, getConfig, putConfig, getNewsletter, putNewsletter, getSocial, putSocial, getExact, putExact, getAdsSettings, putAdsSettings, getUsersState, updateUsersState;
   if(process.env.DATABASE_URL) {
     const {default:pg}=await import('pg');
     const pool=new pg.Pool({connectionString:process.env.DATABASE_URL,max:3});
@@ -25,6 +25,10 @@ export async function database() {
     await pool.query('CREATE TABLE IF NOT EXISTS ads_settings (id INTEGER PRIMARY KEY, payload JSONB NOT NULL)');
     getAdsSettings=async()=> (await pool.query('SELECT payload FROM ads_settings WHERE id=1')).rows[0]?.payload||{};
     putAdsSettings=async value=>{await pool.query('INSERT INTO ads_settings VALUES(1,$1) ON CONFLICT(id) DO UPDATE SET payload=EXCLUDED.payload',[JSON.stringify(value)]);};
+    await pool.query('CREATE TABLE IF NOT EXISTS app_users (id INTEGER PRIMARY KEY, payload JSONB NOT NULL)');
+    await pool.query(`INSERT INTO app_users VALUES(1,'{"users":[],"sessions":[]}'::jsonb) ON CONFLICT(id) DO NOTHING`);
+    getUsersState=async()=> (await pool.query('SELECT payload FROM app_users WHERE id=1')).rows[0].payload;
+    updateUsersState=async change=>{const client=await pool.connect();try{await client.query('BEGIN');const state=(await client.query('SELECT payload FROM app_users WHERE id=1 FOR UPDATE')).rows[0].payload;const result=change(state);await client.query('UPDATE app_users SET payload=$1 WHERE id=1',[JSON.stringify(state)]);await client.query('COMMIT');return result;}catch(e){await client.query('ROLLBACK');throw e;}finally{client.release();}};
     close=()=>pool.end();
   } else {
     if(process.env.NODE_ENV==='production') throw Error('DATABASE_URL ontbreekt');
@@ -51,7 +55,10 @@ export async function database() {
     db.exec('CREATE TABLE IF NOT EXISTS ads_settings (id INTEGER PRIMARY KEY,payload TEXT NOT NULL)');
     getAdsSettings=async()=>{const row=db.prepare('SELECT payload FROM ads_settings WHERE id=1').get();return row?JSON.parse(row.payload):{};};
     putAdsSettings=async value=>{db.prepare('INSERT INTO ads_settings VALUES(1,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload').run(JSON.stringify(value));};
+    db.exec(`CREATE TABLE IF NOT EXISTS app_users (id INTEGER PRIMARY KEY,payload TEXT NOT NULL); INSERT OR IGNORE INTO app_users VALUES(1,'{"users":[],"sessions":[]}');`);
+    getUsersState=async()=>JSON.parse(db.prepare('SELECT payload FROM app_users WHERE id=1').get().payload);
+    updateUsersState=async change=>{db.exec('BEGIN IMMEDIATE');try{const state=JSON.parse(db.prepare('SELECT payload FROM app_users WHERE id=1').get().payload);const result=change(state);db.prepare('UPDATE app_users SET payload=? WHERE id=1').run(JSON.stringify(state));db.exec('COMMIT');return result;}catch(e){db.exec('ROLLBACK');throw e;}};
     close=()=>db.close();
   }
-  return {get,put,close,getRoyalties,updateRoyalties,getConfig,putConfig,getNewsletter,putNewsletter,getSocial,putSocial,getExact,putExact,getAdsSettings,putAdsSettings};
+  return {get,put,close,getRoyalties,updateRoyalties,getConfig,putConfig,getNewsletter,putNewsletter,getSocial,putSocial,getExact,putExact,getAdsSettings,putAdsSettings,getUsersState,updateUsersState};
 }

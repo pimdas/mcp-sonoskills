@@ -1,3 +1,4 @@
+import {UserError,companyEmail,publicUser,bootstrapOwner,passwordHash,verifyPassword,createUser,manageUser,invitationUser,activateUser,sessionUser,newSession,removeSession} from './users.mjs';
 import {googleAdsConfig,googleAdsSetup,googleAdsReport,validateAdsSettings} from './google-ads.mjs';
 import {demographics,demographicResources} from './demographics.mjs';
 import {ga4Configured,websiteReport} from './ga4.mjs';
@@ -22,6 +23,7 @@ const secret=process.env.SESSION_SECRET;
 if(!email || !password || password.length<16 || !secret || secret.length<32) throw Error('Stel ADMIN_EMAIL, ADMIN_PASSWORD (min. 16 tekens) en SESSION_SECRET (min. 32 tekens) in.');
 const salt=randomBytes(16), hash=scryptSync(password,salt,64);
 const db=await database();
+await db.updateUsersState(state=>bootstrapOwner(state,email,createHmac('sha256',secret).update(email+'\0'+password).digest('hex')));
 let snapshot=await db.get()||{data:{},syncedAt:null},syncing=false,syncError=null;
 let workspaceConfig=await db.getConfig();
 let adsSettings=await db.getAdsSettings();
@@ -38,11 +40,8 @@ function paymentsStatus(){return paymentState.scope===paymentScope()?paymentStat
 const attempts=new Map();
 const sign=s=>createHmac('sha256',secret).update(s).digest('hex');
 const equal=(a,b)=>Buffer.byteLength(a)===Buffer.byteLength(b)&&timingSafeEqual(Buffer.from(a),Buffer.from(b));
-function session(req) {
-  const raw=req.headers.cookie?.split(';').map(s=>s.trim()).find(s=>s.startsWith('ss_session='))?.slice(11)||'';
-  const [expires,nonce,signature]=raw.split('.');
-  return expires && nonce && signature && Number(expires)>Date.now() && equal(sign(`${expires}.${nonce}`),signature);
-}
+function sessionToken(req){return req.headers.cookie?.split(';').map(s=>s.trim()).find(s=>s.startsWith('ss_session='))?.slice(11)||'';}
+function sessionCookie(token){return `ss_session=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=28800${production?'; Secure':''}`;}
 async function body(req) {let s='';for await(const chunk of req){s+=chunk;if(s.length>1048576)throw Error('Verzoek te groot');}return JSON.parse(s||'{}');}
 async function sync() {
   if(syncing || !process.env.EDUFRAME_API_TOKEN) return;
@@ -65,7 +64,7 @@ async function sync() {
     await db.put(next);snapshot=next;paymentState=nextPaymentState;
   }catch(e){syncError=e.message;console.error('Synchronisatie mislukt:',e.message);}finally{syncing=false;}
 }
-const assets={'/google-ads.js':['google-ads.js','text/javascript; charset=utf-8'],'/demographics.js':['demographics.js','text/javascript; charset=utf-8'],'/sonoskills-logo-dark.png':['sonoskills-logo-dark.png','image/png'],'/sonoskills-logo.png':['sonoskills-logo.png','image/png'],'/reviews-embed.js':['reviews-embed.js','text/javascript; charset=utf-8'],'/website.js':['website.js','text/javascript; charset=utf-8'],'/social.js':['social.js','text/javascript; charset=utf-8'],'/fonts/campton-extrabold.woff':['fonts/campton-extrabold.woff','font/woff'],'/periods.js':['periods.js','text/javascript; charset=utf-8'],'/royalties.js':['royalties.js','text/javascript; charset=utf-8'],'/':['index.html','text/html; charset=utf-8'],'/app.js':['app.js','text/javascript; charset=utf-8'],'/style.css':['style.css','text/css; charset=utf-8']};
+const assets={'/users.js':['users.js','text/javascript; charset=utf-8'],'/activate.js':['activate.js','text/javascript; charset=utf-8'],'/google-ads.js':['google-ads.js','text/javascript; charset=utf-8'],'/demographics.js':['demographics.js','text/javascript; charset=utf-8'],'/sonoskills-logo-dark.png':['sonoskills-logo-dark.png','image/png'],'/sonoskills-logo.png':['sonoskills-logo.png','image/png'],'/reviews-embed.js':['reviews-embed.js','text/javascript; charset=utf-8'],'/website.js':['website.js','text/javascript; charset=utf-8'],'/social.js':['social.js','text/javascript; charset=utf-8'],'/fonts/campton-extrabold.woff':['fonts/campton-extrabold.woff','font/woff'],'/periods.js':['periods.js','text/javascript; charset=utf-8'],'/royalties.js':['royalties.js','text/javascript; charset=utf-8'],'/':['index.html','text/html; charset=utf-8'],'/app.js':['app.js','text/javascript; charset=utf-8'],'/style.css':['style.css','text/css; charset=utf-8']};
 const server=http.createServer(async(req,res)=>{
   const send=(status,data,type='application/json; charset=utf-8')=>{res.writeHead(status,{'Content-Type':type});res.end(type.startsWith('application/json')?JSON.stringify(data):data);};
   res.setHeader('Cache-Control','no-store');res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('X-Frame-Options','DENY');res.setHeader('Referrer-Policy','same-origin');
@@ -75,23 +74,31 @@ const server=http.createServer(async(req,res)=>{
     const url=new URL(req.url,'http://localhost');
     if(req.method==='GET' && url.pathname==='/health')return send(200,{ok:true});
     if(req.method==='GET'&&url.pathname==='/courses'){const paths={all:'/overview',handson:'/handson',elearning:'/online/elearning',ondemand:'/online/on-demand',live:'/online/live',products:'/products',external:'/external',other:'/other',fixed:'/handson',flexible:'/online/elearning'};res.writeHead(302,{Location:(paths[url.searchParams.get('workspace')]||'/overview')+url.search});return res.end();}
-    if(req.method==='GET' && ['/', '/demographics', '/overview','/handson','/online/elearning','/online/on-demand','/online/live','/products','/external','/other','/royalties','/data-sources','/social','/marketing','/marketing/social-media','/marketing/nieuwsbrief','/marketing/reviews','/marketing/website','/marketing/google-ads'].includes(url.pathname)){return send(200,await readFile(new URL('./public/index.html',import.meta.url)),'text/html; charset=utf-8');}
+    if(req.method==='GET'&&url.pathname==='/activate')return send(200,await readFile(new URL('./public/activate.html',import.meta.url)),'text/html; charset=utf-8');
+    if(req.method==='GET' && ['/', '/users', '/demographics', '/overview','/handson','/online/elearning','/online/on-demand','/online/live','/products','/external','/other','/royalties','/data-sources','/social','/marketing','/marketing/social-media','/marketing/nieuwsbrief','/marketing/reviews','/marketing/website','/marketing/google-ads'].includes(url.pathname)){return send(200,await readFile(new URL('./public/index.html',import.meta.url)),'text/html; charset=utf-8');}
     if(req.method==='GET' && assets[url.pathname]){const [file,type]=assets[url.pathname];return send(200,await readFile(new URL(`./public/${file}`,import.meta.url)),type);}
     if(!url.pathname.startsWith('/api/'))return send(404,{error:'Niet gevonden'});
     if(req.method==='POST' && (req.headers['x-requested-with']!=='SonoSkills' || !String(req.headers['content-type']).startsWith('application/json')))return send(403,{error:'Ongeldig verzoek'});
     if(url.pathname==='/api/login' && req.method==='POST') {
-      const ip=req.socket.remoteAddress; // One conservative limit behind Railway's reverse proxy.
-      const now=Date.now();
+      const ip=req.socket.remoteAddress,now=Date.now(),input=await body(req);
+      let normalized;try{normalized=companyEmail(input.email);}catch{}
       for(const [key,v] of attempts)if(v.until<=now)attempts.delete(key);
-      const state=attempts.get(ip)||{count:0,until:now+15*60e3};
-      if(state.count>=10)return send(429,{error:'Te veel pogingen. Probeer over 15 minuten opnieuw.'});
-      const input=await body(req);state.count++;attempts.set(ip,state);
-      const actual=scryptSync(String(input.password||''),salt,64);
-      if(String(input.email||'').toLowerCase()!==email.toLowerCase() || !timingSafeEqual(hash,actual))return send(401,{error:'E-mailadres of wachtwoord klopt niet.'});
-      attempts.delete(ip);
-      const value=`${now+8*3600e3}.${randomBytes(20).toString('hex')}`;
-      res.setHeader('Set-Cookie',`ss_session=${value}.${sign(value)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=28800${production?'; Secure':''}`);
-      return send(200,{ok:true});
+      const key='login:'+ip+':'+(normalized||'invalid'),globalKey='login:'+ip;
+      const state=attempts.get(key)||{count:0,until:now+15*60e3},global=attempts.get(globalKey)||{count:0,until:now+15*60e3};
+      if(state.count>=10||global.count>=100)return send(429,{error:'Te veel pogingen. Probeer over 15 minuten opnieuw.'});
+      state.count++;global.count++;attempts.set(key,state);attempts.set(globalKey,global);
+      const usersState=await db.getUsersState(),user=usersState.users.find(u=>u.email===normalized);
+      const supplied=typeof input.password==='string'&&input.password.length<=256?input.password:'';
+      let valid=false;if(user&&!user.owner)valid=await verifyPassword(supplied,user.passwordHash);else valid=timingSafeEqual(hash,scryptSync(supplied,salt,64));
+      if(!user||user.disabled||!valid)return send(401,{error:'E-mailadres of wachtwoord klopt niet.'});
+      const logged=await db.updateUsersState(state=>newSession(state,user.id,user.version));attempts.delete(key);
+      res.setHeader('Set-Cookie',sessionCookie(logged.token));return send(200,{ok:true,user:logged.user});
+    }
+    if(['/api/activate/check','/api/activate'].includes(url.pathname)&&req.method==='POST'){
+      const key='activate:'+req.socket.remoteAddress,now=Date.now();for(const [k,v] of attempts)if(v.until<=now)attempts.delete(k);const attempt=attempts.get(key)||{count:0,until:now+15*60e3};if(attempt.count>=20)return send(429,{error:'Te veel pogingen. Probeer over 15 minuten opnieuw.'});attempt.count++;attempts.set(key,attempt);
+      const input=await body(req);const user=invitationUser(await db.getUsersState(),input.token);
+      if(url.pathname.endsWith('/check'))return send(200,{email:user.email,name:user.name});
+      const hash=await passwordHash(input.password);await db.updateUsersState(state=>activateUser(state,input.token,hash));return send(200,{ok:true});
     }
     if(url.pathname==='/api/exact/callback' && req.method==='GET'){
       if(exactSyncing)return send(409,{error:'Wacht tot de synchronisatie klaar is.'});
@@ -103,7 +110,15 @@ const server=http.createServer(async(req,res)=>{
       try{const tokens=await exchangeCode(exactConfig(),url.searchParams.get('code'));exact={...exact,tokens:encryptTokens(tokens,secret),connectedAt:new Date().toISOString()};await db.putExact(exact);}catch(e){console.error('Exact autorisatie mislukt:',e.message);return send(502,{error:'Koppelen met Exact is mislukt. Start opnieuw vanuit Databronnen.'});}
       res.writeHead(303,{Location:'/data-sources?exact=connected'});return res.end();
     }
-    if(!session(req))return send(401,{error:'Log in om verder te gaan.'});
+    const currentUser=sessionUser(await db.getUsersState(),sessionToken(req));
+    if(!currentUser)return send(401,{error:'Log in om verder te gaan.'});
+    if(url.pathname.startsWith('/api/users')){
+      if(currentUser.role!=='admin')return send(403,{error:'Alleen beheerders kunnen gebruikers beheren.'});
+      if(url.pathname==='/api/users'&&req.method==='GET')return send(200,{users:(await db.getUsersState()).users.map(publicUser),currentUserId:currentUser.id});
+      if(url.pathname==='/api/users'&&req.method==='POST'){const input=await body(req);return send(201,await db.updateUsersState(state=>createUser(state,currentUser.id,input)));}
+      if(url.pathname==='/api/users/manage'&&req.method==='POST'){const input=await body(req);return send(200,await db.updateUsersState(state=>manageUser(state,currentUser.id,input)));}
+      return send(404,{error:'Niet gevonden'});
+    }
     if(url.pathname==='/api/marketing/reviews/embed'&&req.method==='GET'){
       res.setHeader('X-Frame-Options','SAMEORIGIN');
       res.setHeader('Referrer-Policy','no-referrer');
@@ -120,8 +135,8 @@ const server=http.createServer(async(req,res)=>{
     if(url.pathname==='/api/exact'&&req.method==='GET')return send(200,{categories:externalSubcategories(snapshot.data,workspaceConfig),customerCategories:exact.customerCategories||{},editions:(snapshot.data.planned_courses||[]).filter(e=>{const c=(snapshot.data.courses||[]).find(c=>c.id===e.course_id);return workspaceIndex(snapshot.data,workspaceConfig).classify(c)==='external';}).map(e=>({id:String(e.id),name:((snapshot.data.courses||[]).find(c=>c.id===e.course_id)?.name||'Cursus')+' · '+(e.start_date?.slice(0,10)||'zonder datum')})),links:exact.links||{},connected:!!exact.tokens,syncing:exactSyncing,error:exactError,syncedAt:exact.syncedAt||null,accounts:exact.accounts||[],invoices:exact.invoices||[],selected:exact.selected||[],excluded:exact.excluded||[]});
     if(url.pathname==='/api/exact/sync'&&req.method==='POST'){if(!exact.tokens)return send(409,{error:'Koppel eerst Exact Online.'});if(exactSyncing)return send(409,{error:'Exact synchroniseert al.'});void syncExact();return send(202,{ok:true});}
     if(url.pathname==='/api/exact/settings'&&req.method==='POST'){const input=await body(req);if(exactSyncing)return send(409,{error:'Wacht tot de synchronisatie klaar is.'});if(!Array.isArray(input.selected)||!Array.isArray(input.excluded))return send(400,{error:'Ongeldige selectie.'});const validAccounts=new Set((exact.accounts||[]).map(a=>a.id)),validInvoices=new Set((exact.invoices||[]).map(i=>i.id));if(input.selected.some(x=>!validAccounts.has(x))||input.excluded.some(x=>!validInvoices.has(x)))return send(400,{error:'Selectie bevat onbekende klanten of facturen.'});const validEditions=new Set((snapshot.data.planned_courses||[]).map(e=>String(e.id)));const links=input.links||{};if(typeof links!=='object'||Array.isArray(links)||Object.entries(links).some(([invoice,edition])=>!validInvoices.has(invoice)||!validEditions.has(String(edition))))return send(400,{error:'Ongeldige cursuskoppeling.'});const customerCategories=input.customerCategories??exact.customerCategories??{};const validCategories=new Set(externalSubcategories(snapshot.data,workspaceConfig).map(c=>c.id));if(!customerCategories||typeof customerCategories!=='object'||Array.isArray(customerCategories)||Object.entries(customerCategories).some(([customer,category])=>!input.selected.includes(customer)||!validAccounts.has(customer)||!validCategories.has(String(category))))return send(400,{error:'Kies bestaande externe subcategorieën voor de geselecteerde klanten.'});exact={...exact,selected:[...new Set(input.selected)],excluded:[...new Set(input.excluded)],links,customerCategories:Object.fromEntries(Object.entries(customerCategories).map(([k,v])=>[k,String(v)]))};await db.putExact(exact);return send(200,{ok:true});}
-    if(url.pathname==='/api/logout' && req.method==='POST'){res.setHeader('Set-Cookie',`ss_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0${production?'; Secure':''}`);return send(200,{ok:true});}
-    if(url.pathname==='/api/status' && req.method==='GET')return send(200,{configured:!!process.env.EDUFRAME_API_TOKEN,syncedAt:snapshot.syncedAt,syncing,error:syncError,payments:paymentsStatus(),ga4:{configured:ga4Configured()},exactConnected:!!exact.tokens,social:{configured:!!socialConfig().token,syncing:socialSyncing,error:socialError,updated:JSON.stringify(Object.values(social.accounts||{}).map(a=>[a.syncedAt,a.postsSyncedAt,a.error,a.postsError]))},newsletter:{configured:!!process.env.MAILERLITE_API_TOKEN,syncedAt:newsletter.syncedAt||null,syncing:newsletterSyncing,error:newsletterError,progress:newsletterProgress}});
+    if(url.pathname==='/api/logout' && req.method==='POST'){await db.updateUsersState(state=>removeSession(state,sessionToken(req)));res.setHeader('Set-Cookie',`ss_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0${production?'; Secure':''}`);return send(200,{ok:true});}
+    if(url.pathname==='/api/status' && req.method==='GET')return send(200,{user:currentUser,configured:!!process.env.EDUFRAME_API_TOKEN,syncedAt:snapshot.syncedAt,syncing,error:syncError,payments:paymentsStatus(),ga4:{configured:ga4Configured()},exactConnected:!!exact.tokens,social:{configured:!!socialConfig().token,syncing:socialSyncing,error:socialError,updated:JSON.stringify(Object.values(social.accounts||{}).map(a=>[a.syncedAt,a.postsSyncedAt,a.error,a.postsError]))},newsletter:{configured:!!process.env.MAILERLITE_API_TOKEN,syncedAt:newsletter.syncedAt||null,syncing:newsletterSyncing,error:newsletterError,progress:newsletterProgress}});
     if(url.pathname==='/api/google-ads/setup'&&req.method==='GET')return send(200,googleAdsSetup(googleAdsConfig(adsSettings)));
     if(url.pathname==='/api/google-ads/settings'&&req.method==='POST'){let next;try{next=validateAdsSettings(await body(req));}catch(e){return send(400,{error:e.message});}await db.putAdsSettings(next);adsSettings=next;return send(200,googleAdsSetup(googleAdsConfig(adsSettings)));}
     if(url.pathname==='/api/google-ads'&&req.method==='GET')return send(200,await googleAdsReport(Object.fromEntries(url.searchParams),googleAdsConfig(adsSettings)));
@@ -170,7 +185,7 @@ const server=http.createServer(async(req,res)=>{
       return send(200,result);
     }
     return send(404,{error:'Niet gevonden'});
-  } catch(e){if(e instanceof InputError)return send(400,{error:e.message});console.error('Request failed:',e.name);send(500,{error:'Het verzoek kon niet worden verwerkt.'});}
+  } catch(e){if(e instanceof UserError)return send(e.status,{error:e.message});if(e instanceof InputError)return send(400,{error:e.message});console.error('Request failed:',e.name);send(500,{error:'Het verzoek kon niet worden verwerkt.'});}
 });
 server.listen(Number(process.env.PORT||3000),'0.0.0.0',()=>console.log('SonoSkills dashboard gestart'));
 const minutes=Math.max(15,Number(process.env.SYNC_INTERVAL_MINUTES)||60);

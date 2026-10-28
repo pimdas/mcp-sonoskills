@@ -11,7 +11,7 @@ Eigen analyseomgeving voor SonoSkills, bedoeld voor GitHub → Railway. Node.js 
 | Variable | Waarde |
 | --- | --- |
 | `DATABASE_URL` | Railway-reference naar `${{Postgres.DATABASE_URL}}` (pas servicenaam aan indien nodig) |
-| `ADMIN_EMAIL` | Jouw loginadres |
+| `ADMIN_EMAIL` | Bestaand beheerdersadres, uitsluitend @sonoskills.com |
 | `ADMIN_PASSWORD` | Een uniek wachtwoord van minimaal 16 tekens |
 | `SESSION_SECRET` | Willekeurige geheime waarde van minimaal 32 tekens, bijvoorbeeld `openssl rand -hex 32` |
 | `EDUFRAME_API_TOKEN` | Eduframe access token, alleen in Railway opslaan |
@@ -23,7 +23,7 @@ Eduframe scopes voor deze import: `courses:read`, `enrollments:read`, `orders:re
 
 ## Inbegrepen
 
-- Login met acht uur geldige, ondertekende HttpOnly/Secure/SameSite-cookies, verzoekbeveiliging en een limiet op loginpogingen. Eén beheeraccount via variables.
+- Login met acht uur geldige HttpOnly/Secure/SameSite-cookies, server-side sessies, verzoekbeveiliging en een limiet op loginpogingen. Het bestaande beheeraccount komt uit variables; extra accounts worden door beheerders toegevoegd.
 - Werkruimtes op basis van Eduframe-categorieën: Hands-on; Online → eLearning, On-demand solo classes, Live solo classes; Producten; Extern. Het overzicht bevat eigen templates, zonder Extern.
 - Categorieën (inclusief bovenliggende categorieën), templates en uitklapbare edities met eigen ID en Eduframe-variantnaam.
 - Filters op categorie, template, locatie en periode. Hands-on/live/overzicht/extern: startdatum editie. eLearning/on-demand/producten: boekingsdatum order, met inschrijfdatum als terugval.
@@ -156,3 +156,11 @@ De synchronisatie leest aanvullend `users`, `accounts` en `signup_questions`. Va
 Onder Databronnen vul je het tiencijferige Ads-klantnummer in. Een managerklantnummer is optioneel. Deze instellingen worden apart van de categorie-indeling opgeslagen. De sleutel komt uit `GOOGLE_ADS_SERVICE_ACCOUNT_JSON`, of uit de bestaande `GA4_SERVICE_ACCOUNT_JSON`. Geef dat serviceaccount Alleen-lezen-toegang in Google Ads. Schakel de Google Ads API in voor hetzelfde Cloud-project en vraag productie-toegang (Explorer) aan. De actuele Google Ads API vereist geen developer token meer. Als alternatief voor de instellingen in het dashboard kunnen `GOOGLE_ADS_CUSTOMER_ID` en `GOOGLE_ADS_LOGIN_CUSTOMER_ID` worden gebruikt.
 
 De API gebruikt v25 `searchStream`, alleen SELECT-query's, kosten in de accountvaluta en de tijdzone van het Ads-account. De periode loopt tot en met gisteren; recente cijfers en conversies kunnen nog worden bijgesteld. Conversies volgen de datum van de advertentie-interactie. Rapporten worden vijf minuten gecachet; sleutels en tokens blijven op de server.
+
+### Gebruikersbeheer
+
+Onder `/users` kunnen beheerders accounts toevoegen en beheren. Alleen exacte `@sonoskills.com`-adressen zijn toegestaan; subdomeinen en gelijkende suffixen worden ook op de server geweigerd. Gebruikers kunnen het platform gebruiken; beheerders kunnen daarnaast accounts beheren. Er is geen openbare registratie.
+
+Toevoegen geeft een eenmalige activatielink terug, 24 uur geldig. De beheerder deelt deze zelf; er wordt geen e-mail verstuurd. De gebruiker kiest een eigen wachtwoord van 16 tot 256 tekens. Beheerders kunnen een nieuwe activatie- of resetlink maken, accounts uitschakelen/inschakelen en rollen aanpassen. Het bestaande account uit `ADMIN_EMAIL`/`ADMIN_PASSWORD` blijft beheerd via Railway en kan niet via de interface worden uitgeschakeld.
+
+Wachtwoorden worden met scrypt en een eigen salt gehasht. Activering/reset is transactioneel en eenmalig; de activatietoken staat in het URL-fragment en wordt na openen uit de adresbalk verwijderd. Alleen tokenhashes en sessiehashes worden in de database opgeslagen. Uitloggen, uitschakelen, een rolwijziging of een voltooide wachtwoordreset trekt betreffende sessies in. Wijziging van de bestaande beheerderscredentials trekt beheerderssessies in. Bij deze migratie moet iedereen eenmalig opnieuw inloggen; bestaande snapshots en koppelingen blijven behouden.

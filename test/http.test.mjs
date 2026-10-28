@@ -3,14 +3,14 @@ import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {once} from 'node:events';
 test('HTTP authentication, CSRF protection, logout, empty data and CSV',async()=>{
- const child=spawn(process.execPath,['server.mjs'],{cwd:new URL('..',import.meta.url),env:{...process.env,NODE_ENV:'development',PORT:'3197',SQLITE_PATH:':memory:',DATABASE_URL:'',EDUFRAME_API_TOKEN:'',ADMIN_EMAIL:'test@example.com',ADMIN_PASSWORD:'test-password-long-enough',SESSION_SECRET:'12345678901234567890123456789012'},stdio:['ignore','pipe','pipe']});
+ const child=spawn(process.execPath,['server.mjs'],{cwd:new URL('..',import.meta.url),env:{...process.env,NODE_ENV:'development',PORT:'3197',SQLITE_PATH:':memory:',DATABASE_URL:'',EDUFRAME_API_TOKEN:'',ADMIN_EMAIL:'test@sonoskills.com',ADMIN_PASSWORD:'test-password-long-enough',SESSION_SECRET:'12345678901234567890123456789012'},stdio:['ignore','pipe','pipe']});
  try{
   await Promise.race([once(child.stdout,'data'),new Promise((_,reject)=>{const t=setTimeout(()=>reject(Error('Startup timeout')),5000);t.unref();})]);
   const url='http://127.0.0.1:3197';
   assert.equal((await fetch(url+'/health')).status,200);
   for(const path of ['/marketing/google-ads','/demographics','/courses','/data-sources','/royalties','/online/elearning','/social','/marketing','/marketing/social-media','/marketing/nieuwsbrief','/marketing/reviews','/marketing/website']){const r=await fetch(url+path);assert.equal(r.status,200);assert.ok((await r.text()).includes('SonoSkills | Insights'));}
   assert.equal((await fetch(url+'/api/google-ads')).status,401);assert.equal((await fetch(url+'/api/google-ads/setup')).status,401);assert.equal((await fetch(url+'/api/demographics')).status,401);assert.equal((await fetch(url+'/api/analytics')).status,401);assert.equal((await fetch(url+'/api/social')).status,401);assert.equal((await fetch(url+'/api/marketing/reviews')).status,401);assert.equal((await fetch(url+'/api/newsletter')).status,401);assert.equal((await fetch(url+'/api/website')).status,401);assert.equal((await fetch(url+'/api/marketing/reviews/embed')).status,401);
-  const creds={email:'test@example.com',password:'test-password-long-enough'};
+  const creds={email:'test@sonoskills.com',password:'test-password-long-enough'};
   assert.equal((await fetch(url+'/api/login',{method:'POST',body:JSON.stringify(creds)})).status,403);
   const login=await fetch(url+'/api/login',{method:'POST',headers:{'Content-Type':'application/json','X-Requested-With':'SonoSkills'},body:JSON.stringify(creds)});
   assert.equal(login.status,200);const cookie=login.headers.get('set-cookie').split(';')[0];
@@ -33,12 +33,12 @@ test('royalty routes persist agreements, enforce payment readiness and preserve 
  const dir=await mkdtemp(join(tmpdir(),'royalties-')),path=join(dir,'test.sqlite');
  const {database}=await import('../db.mjs');process.env.SQLITE_PATH=path;
  const db=await database();await db.put({syncedAt:'2026-02-01T12:00:00Z',paymentState:{ready:true,scope:'1',syncedAt:'2026-02-01T12:00:00Z'},data:{categories:[{id:1,name:'eLearning'}],courses:[{id:1,name:'eLearning',category_id:1}],planned_courses:[{id:10,course_id:1,type:'FlexiblePlannedCourse'}],orders:[{id:1,planned_course_id:10}],invoices:[{id:1,order_id:1,number:'TEST',status:'paid',currency:'EUR'}],payments:[{id:1,invoice_id:1,amount:'100.00',currency:'EUR',status:'paid',date:'2026-01-15'}]}});await db.close();
- const child=spawn(process.execPath,['server.mjs'],{cwd:new URL('..',import.meta.url),env:{...process.env,NODE_ENV:'development',PORT:'3198',SQLITE_PATH:path,DATABASE_URL:'',EDUFRAME_API_TOKEN:'',ADMIN_EMAIL:'test@example.com',ADMIN_PASSWORD:'test-password-long-enough',SESSION_SECRET:'12345678901234567890123456789012'},stdio:['ignore','pipe','pipe']});
+ const child=spawn(process.execPath,['server.mjs'],{cwd:new URL('..',import.meta.url),env:{...process.env,NODE_ENV:'development',PORT:'3198',SQLITE_PATH:path,DATABASE_URL:'',EDUFRAME_API_TOKEN:'',ADMIN_EMAIL:'test@sonoskills.com',ADMIN_PASSWORD:'test-password-long-enough',SESSION_SECRET:'12345678901234567890123456789012'},stdio:['ignore','pipe','pipe']});
  try{
   await once(child.stdout,'data');const url='http://127.0.0.1:3198';
   const base={'Content-Type':'application/json','X-Requested-With':'SonoSkills'};
   assert.equal((await fetch(url+'/api/royalties')).status,401);
-  const login=await fetch(url+'/api/login',{method:'POST',headers:base,body:JSON.stringify({email:'test@example.com',password:'test-password-long-enough'})});const cookie=login.headers.get('set-cookie').split(';')[0];
+  const login=await fetch(url+'/api/login',{method:'POST',headers:base,body:JSON.stringify({email:'test@sonoskills.com',password:'test-password-long-enough'})});const cookie=login.headers.get('set-cookie').split(';')[0];
   const post=(path,data)=>fetch(url+path,{method:'POST',headers:{...base,cookie},body:JSON.stringify(data)});
   assert.equal((await post('/api/royalties/agreement',{courseId:1,recipient:'Partner',percentage:'101',from:'2026-01-01'})).status,400);
   const saved=await post('/api/royalties/agreement',{courseId:1,recipient:'Partner',percentage:'10',from:'2026-01-01'});assert.equal(saved.status,200);const a=await saved.json();
