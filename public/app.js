@@ -104,7 +104,12 @@ let marketingMenuOpen=false;
 try{marketingMenuOpen=localStorage.getItem('sonoskills-marketing-menu')==='open';}catch{}
 function setMarketingMenu(open){marketingMenuOpen=open;$('#marketing-toggle').setAttribute('aria-expanded',String(open));$('#marketing-links').hidden=!open;}
 $('#marketing-toggle').onclick=()=>{setMarketingMenu(!marketingMenuOpen);try{localStorage.setItem('sonoskills-marketing-menu',marketingMenuOpen?'open':'closed');}catch{}};
+let adminMenuOpen=false;
+try{adminMenuOpen=localStorage.getItem('sonoskills-admin-menu')==='open';}catch{}
+function setAdminMenu(open){adminMenuOpen=open;$('#admin-toggle').setAttribute('aria-expanded',String(open));$('#admin-links').hidden=!open;}
+$('#admin-toggle').onclick=()=>{setAdminMenu(!adminMenuOpen);try{localStorage.setItem('sonoskills-admin-menu',adminMenuOpen?'open':'closed');}catch{}};
 function showWorkspace(){
+  const management=['users','sources'].includes(page);setAdminMenu(management||adminMenuOpen);$('#admin-toggle').classList.toggle('active-parent',management);
   $('#users-page').hidden=page!=='users';
   if(page!=='users'){$('#user-link-result').hidden=true;$('#user-link-result').replaceChildren();}
   $('#demographics-page').hidden=page!=='demographics';
