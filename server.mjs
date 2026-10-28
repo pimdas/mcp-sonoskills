@@ -16,7 +16,7 @@ import {resources,fetchResource} from './eduframe.mjs';
 import {workspaceIndex,validateMapping,externalSubcategories} from './workspaces.mjs';
 import {financeCsv} from './finance.mjs';
 import {analyze,csv} from './analytics.mjs';
-import {InputError,invoiceTargets,templateOptions,saveAgreement,removeAgreement,report,finalize,markPaid,reportCsv,settlementCsv} from './royalties.mjs';
+import {InputError,invoiceTargets,templateOptions,saveAgreement,removeAgreement,report,finalize,removeSettlement,markPaid,reportCsv,settlementCsv} from './royalties.mjs';
 const production=process.env.NODE_ENV==='production';
 const email=process.env.ADMIN_EMAIL;
 const password=process.env.ADMIN_PASSWORD;
@@ -165,8 +165,9 @@ const server=http.createServer(async(req,res)=>{
       if(req.method==='POST'&&url.pathname==='/api/royalties/finalize'){
         if(syncing||!paymentsStatus().ready||syncError)return send(409,{error:'Wacht op een succesvolle synchronisatie inclusief betalingen voordat je een afrekening vaststelt.'});
         const input=await body(req);const data=snapshot.data,at=paymentState.syncedAt;
-        return send(200,await db.updateRoyalties(state=>finalize(data,state,input,at,workspaceConfig)));
+        return send(200,await db.updateRoyalties(state=>finalize(data,state,input,at,workspaceConfig,currentUser)));
       }
+      if(req.method==='POST'&&url.pathname==='/api/royalties/settlement/remove'){const input=await body(req);return send(200,await db.updateRoyalties(state=>removeSettlement(state,input.id,currentUser)));}
       if(req.method==='POST'&&url.pathname==='/api/royalties/paid'){const input=await body(req);return send(200,await db.updateRoyalties(state=>markPaid(state,input.id,input.date,input.reference)));}
       if(req.method==='GET'&&url.pathname==='/api/royalties/settlement-export'){
         const state=await db.getRoyalties(),s=state.settlements.find(s=>s.id===url.searchParams.get('id'));if(!s)return send(404,{error:'Afrekening niet gevonden.'});

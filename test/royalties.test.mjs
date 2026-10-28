@@ -16,3 +16,40 @@ test('deduplicates payments and separates currencies',()=>{const d=fixture(),s=e
 test('invalid currency or missing date warns rather than estimating',()=>{const d=fixture(),s=emptyState();agreement(s,d);d.payments[0].date='';d.payments[2].currency='USD';const r=report(d,s,jan);assert.equal(r.rows.length,0);assert.equal(r.warnings.length,2);assert.equal(cents('1.001'),null);assert.equal(cents('-1.23'),-123);});
 test('payment connector requests read-only nested endpoint and keeps necessary fields',async()=>{let requested;const result=await fetchResource('invoices/1000/payments','secret',async(url,options)=>{requested=String(url);assert.equal(options.method,undefined);return new Response(JSON.stringify([{id:1,invoice_id:1000,status:'paid',amount:'12.34',currency:'EUR',date:'2026-01-01',gateway_id:'unneeded'}]));},async()=>{});assert.ok(requested.includes('/invoices/1000/payments'));assert.equal(result[0].gateway_id,undefined);assert.equal(result[0].date,'2026-01-01');});
 test('royalty state updates persist and roll back on validation errors',async()=>{process.env.SQLITE_PATH=':memory:';const {database}=await import('../db.mjs');const db=await database();await db.updateRoyalties(state=>agreement(state,fixture()));assert.equal((await db.getRoyalties()).agreements.length,1);await assert.rejects(()=>db.updateRoyalties(state=>{state.parties.length=0;throw Error('rollback');}),/rollback/);assert.equal((await db.getRoyalties()).parties.length,1);await db.close();});
+
+test('custom settlement amount leaves remainder and subsequent settlement does not double count',()=>{
+ const d=fixture(),s=emptyState(),a=agreement(s,d),input={...jan,partyId:a.partyId};
+ const first=finalize(d,s,{...input,amounts:[{courseId:1,currency:'EUR',amount:'12,34'}],note:'Gedeeltelijk'},'x');
+ assert.equal(first.totals[0].amountCents,1234);assert.equal(first.totals[0].calculatedCents,3000);assert.equal(first.totals[0].adjustmentCents,-1766);
+ assert.equal(first.lines.reduce((n,l)=>n+l.numerator,0),12340000);assert.equal(report(d,s,jan).rows[0].dueCents,1766);
+ assert.ok(settlementCsv(first).includes('Gedeeltelijk'));assert.ok(settlementCsv(first).includes('12.34'));
+ const frozen=structuredClone(first);finalize(d,s,input,'y');assert.equal(report(d,s,jan).rows[0].dueCents,0);assert.deepEqual(first,frozen);
+});
+test('overpayment and negative adjustment amounts are carried forward as signed balances',()=>{
+ const d=fixture(),s=emptyState(),a=agreement(s,d),input={...jan,partyId:a.partyId};
+ finalize(d,s,{...input,amounts:[{courseId:1,currency:'EUR',amount:'40'}]},'x');assert.equal(report(d,s,jan).rows[0].dueCents,-1000);
+ finalize(d,s,{...input,amounts:[{courseId:1,currency:'EUR',amount:'-4'}]},'x');assert.equal(report(d,s,jan).rows[0].dueCents,-600);
+ finalize(d,s,input,'x');assert.equal(report(d,s,jan).rows[0].dueCents,0);
+});
+test('adjustable amounts remain separate per course and currency and preserve combined rounding',()=>{
+ const d=fixture(),s=emptyState();agreement(s,d);d.invoices[1].currency='USD';d.payments[2].currency='USD';
+ const input={...jan,partyId:s.parties[0].id};finalize(d,s,{...input,amounts:[{courseId:1,currency:'EUR',amount:'1.01'},{courseId:1,currency:'USD',amount:'2.02'}]},'x');
+ let r=report(d,s,jan);assert.equal(r.rows.find(g=>g.currency==='EUR').dueCents,899);assert.equal(r.rows.find(g=>g.currency==='USD').dueCents,1798);
+ finalize(d,s,input,'x');assert.ok(report(d,s,jan).rows.every(g=>g.dueCents===0));
+});
+test('rejects stale previews, malformed amounts, duplicate aliases, extra rows and all-zero overrides atomically',()=>{
+ const d=fixture(),s=emptyState(),a=agreement(s,d),input={...jan,partyId:a.partyId};
+ const revision=report(d,s,input).revision;d.payments[0].amount='101';assert.throws(()=>finalize(d,s,{...input,expectedRevision:revision},'x'),/gewijzigd/);
+ for(const amounts of [[{courseId:1,currency:'EUR',amount:'1.001'}],[{courseId:1,currency:'EUR',amount:'0'}],[],[null],[{courseId:2,currency:'EUR',amount:'1'}],[{courseId:1,currency:'EUR',amount:'90071992547409.91'}]])assert.throws(()=>finalize(d,s,{...input,amounts},'x'));
+ assert.equal(s.settlements.length,0);
+});
+test('deleting either an earlier or paid settlement restores only that allocation and retains audit snapshots',async()=>{
+ const {removeSettlement}=await import('../royalties.mjs');const d=fixture(),s=emptyState(),a=agreement(s,d),input={...jan,partyId:a.partyId};
+ const first=finalize(d,s,{...input,amounts:[{courseId:1,currency:'EUR',amount:'10'}]},'x');const second=finalize(d,s,input,'y');markPaid(s,first.id,'2026-02-01','BANK');const frozen=structuredClone(first);
+ removeSettlement(s,first.id,{email:'pim@sonoskills.com'});assert.equal(report(d,s,jan).rows[0].dueCents,1000);assert.equal(s.deletedSettlements[0].deletedBy.email,'pim@sonoskills.com');assert.deepEqual(s.deletedSettlements[0].lines,frozen.lines);assert.equal(s.deletedSettlements[0].status,'paid');
+ removeSettlement(s,second.id);assert.equal(report(d,s,jan).rows[0].dueCents,3000);assert.throws(()=>removeSettlement(s,first.id),/niet gevonden/);
+});
+test('custom settlement handles mixed positive and negative source lines without losing cents',()=>{
+ const d=fixture(),s=emptyState(),a=agreement(s,d);d.payments[0].amount='-100';
+ finalize(d,s,{...jan,partyId:a.partyId,amounts:[{courseId:1,currency:'EUR',amount:'3.33'}]},'x');assert.equal(report(d,s,jan).rows[0].dueCents,667);
+});

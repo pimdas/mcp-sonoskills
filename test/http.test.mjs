@@ -50,8 +50,17 @@ test('royalty routes persist agreements, enforce payment readiness and preserve 
   assert.equal((await post('/api/royalties/agreement/remove',{id:a.id})).status,400);
   const manual={courseId:1,sourceType:'reseller',sourceName:'123sonography gmbh',reference:'RES-1',from:'2026-01-01',to:'2026-01-31',amount:'200',currency:'EUR'};
   const manualResponse=await post('/api/royalties/manual',manual);assert.equal(manualResponse.status,200);const manualEntry=await manualResponse.json();assert.equal(manualEntry.createdBy.email,'test@sonoskills.com');assert.equal((await post('/api/royalties/manual',manual)).status,400);
-  const withManual=await (await fetch(url+'/api/royalties?from=2026-01-01&to=2026-01-31',{headers:{cookie}})).json();assert.equal(withManual.rows[0].manualBase,20000);assert.equal(withManual.rows[0].dueCents,2000);assert.equal((await post('/api/royalties/finalize',input)).status,200);assert.equal((await post('/api/royalties/manual',{...manual,id:manualEntry.id,amount:'100'})).status,400);assert.equal((await post('/api/royalties/manual/remove',{id:manualEntry.id})).status,400);
+  const withManual=await (await fetch(url+'/api/royalties?from=2026-01-01&to=2026-01-31',{headers:{cookie}})).json();assert.equal(withManual.rows[0].manualBase,20000);assert.equal(withManual.rows[0].dueCents,2000);assert.equal((await post('/api/royalties/finalize',input)).status,200);assert.equal((await post('/api/royalties/manual',{...manual,id:manualEntry.id,amount:'100'})).status,400);
   assert.equal((await post('/api/royalties/manual',{...manual,correctsId:manualEntry.id,reference:'RES-1 correction',amount:'-50'})).status,200);const corrected=await (await fetch(url+'/api/royalties?from=2026-01-01&to=2026-01-31',{headers:{cookie}})).json();assert.equal(corrected.rows[0].dueCents,-500);
+  assert.equal((await post('/api/royalties/manual/remove',{id:manualEntry.id})).status,200);
+  const removedReport=await (await fetch(url+'/api/royalties?from=2026-01-01&to=2026-01-31',{headers:{cookie}})).json();assert.equal(removedReport.manualRevenue.length,0);assert.equal(removedReport.rows[0].dueCents,-2000);assert.equal(removedReport.warnings.length,0);
+  assert.equal((await post('/api/royalties/settlement/remove',{id:s.id})).status,200);
+  assert.equal((await post('/api/royalties/settlement/remove',{id:s.id})).status,400);
+  const fresh=await (await fetch(url+'/api/royalties?from=2026-01-01&to=2026-01-31&partyId='+a.partyId,{headers:{cookie}})).json();
+  const partial=await post('/api/royalties/finalize',{...input,expectedRevision:fresh.revision,amounts:[{courseId:1,currency:'EUR',amount:'-5,00'}],note:'Partial correction'});assert.equal(partial.status,200);const adjusted=await partial.json();assert.equal(adjusted.totals[0].amountCents,-500);assert.equal(adjusted.createdBy.email,'test@sonoskills.com');
+  assert.equal((await post('/api/royalties/finalize',{...input,expectedRevision:fresh.revision,amounts:[{courseId:1,currency:'EUR',amount:'-5'}]})).status,400);
+
+
 
  }finally{child.kill('SIGTERM');await once(child,'exit');await rm(dir,{recursive:true,force:true});}
 });

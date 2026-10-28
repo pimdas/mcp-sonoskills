@@ -27,4 +27,9 @@ export function saveManualRevenue(state,input,data,config={},actor={}){
  const entry={...candidate,id:old?.id||randomUUID(),createdAt:old?.createdAt||now,createdBy:old?.createdBy||by,updatedAt:now,updatedBy:by,history:[...(old?.history||[]),{at:now,by,action:old?'updated':'created',values:candidate}]};
  state.manualRevenue=[...entries.filter(e=>e.id!==entry.id),entry];return entry;
 }
-export function removeManualRevenue(state,id,actor={}){const e=(state.manualRevenue||[]).find(e=>e.id===id);if(!e||e.voidedAt)fail('Handmatige omzet niet gevonden.');if(manualLocked(state,id))fail('Deze invoer is al afgerekend. Voeg een aparte correctie toe.');if((state.manualRevenue||[]).some(x=>x.correctsId===id&&!x.voidedAt))fail('Deze boeking heeft correcties. Trek eerst de nog niet afgerekende correcties in.');e.voidedAt=new Date().toISOString();e.voidedBy={id:actor.id||null,email:actor.email||null};e.history??=[];e.history.push({at:e.voidedAt,by:e.voidedBy,action:'voided'});return {id};}
+export function removeManualRevenue(state,id,actor={}){
+ const entries=state.manualRevenue||[],entry=entries.find(e=>e.id===id);if(!entry||entry.voidedAt)fail('Handmatige omzet niet gevonden of al verwijderd.');
+ const removed=entries.filter(e=>!e.voidedAt&&(e.id===id||e.correctsId===id)),at=new Date().toISOString(),by={id:actor.id||null,email:actor.email||null};
+ for(const e of removed){e.voidedAt=at;e.voidedBy=by;e.history??=[];e.history.push({at,by,action:'voided',parentId:entry.id});}
+ return {id,removedIds:removed.map(e=>e.id)};
+}

@@ -1,6 +1,6 @@
 import {invoiceIndex} from './finance.mjs';
 import {workspaceIndex} from './workspaces.mjs';
-import {randomUUID} from 'node:crypto';
+import {randomUUID,createHash} from 'node:crypto';
 export class InputError extends Error {}
 const fail=message=>{throw new InputError(message);};
 export function validDate(value){if(typeof value!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(value))return false;const d=new Date(value+'T12:00:00Z');return !isNaN(d)&&d.toISOString().slice(0,10)===value;}
@@ -90,7 +90,7 @@ export function report(data,state,filters={},config={}){
  const settled=new Map();
  for(const s of state.settlements)for(const l of s.lines){const prev=settled.get(l.key);settled.set(l.key,{...l,baseCents:(prev?.baseCents||0)+l.baseCents,numerator:(prev?.numerator||0)+l.numerator});}
  for(const prior of settled.values()){
-  if(prior.source==='manual'){if(!eligible.has(prior.courseId)||!manualEntries.some(e=>e.id===prior.manualId))warnings.push(`Eerder afgerekende handmatige omzet ${prior.reference||prior.manualId}: boeking of eLearning-koppeling ontbreekt. Controleer deze voordat je correcties vaststelt.`);continue;}
+  if(prior.source==='manual'){if(!eligible.has(prior.courseId)||!(state.manualRevenue||[]).some(e=>e.id===prior.manualId))warnings.push(`Eerder afgerekende handmatige omzet ${prior.reference||prior.manualId}: boeking of eLearning-koppeling ontbreekt. Controleer deze voordat je correcties vaststelt.`);continue;}
   const target=targetMap.get(prior.invoiceId);
   if(!target||target.ambiguous||!eligible.has(prior.courseId)||target.courseId!==prior.courseId)warnings.push(`Eerder afgerekende betaling #${prior.paymentId}: templatekoppeling is gewijzigd of ontbreekt. Controleer deze voordat je correcties vaststelt.`);
  }
@@ -101,18 +101,53 @@ export function report(data,state,filters={},config={}){
  }
  const groups=new Map();for(const l of lines){const key=`${l.courseId}:${l.partyId}:${l.currency}`;if(!groups.has(key))groups.set(key,{courseId:l.courseId,template:l.template,partyId:l.partyId,recipient:l.recipient,currency:l.currency,baseCents:0,numerator:0,currentBase:0,currentNumerator:0,settledNumerator:0,rates:[],lines:[],eduframeBase:0,manualBase:0});const g=groups.get(key);for(const k of ['baseCents','numerator','currentBase','currentNumerator','settledNumerator']){g[k]+=l[k];if(!Number.isSafeInteger(g[k]))fail('Het totaal is te groot voor een veilige automatische berekening.');}g[l.source==='manual'?'manualBase':'eduframeBase']+=l.currentBase;if(!Number.isSafeInteger(g.manualBase)||!Number.isSafeInteger(g.eduframeBase))fail('De grondslag is te groot voor een veilige berekening.');if(!g.rates.includes(l.bps/100))g.rates.push(l.bps/100);g.lines.push(l);}
  const rows=[...groups.values()].map(g=>({...g,dueCents:round(g.numerator),royaltyCents:round(g.currentNumerator),settledCents:round(g.settledNumerator)})).sort((a,b)=>a.recipient.localeCompare(b.recipient)||a.template.localeCompare(b.template));
- return {manualRevenue:manualEntries.filter(e=>(!filters.courseId||String(e.courseId)===String(filters.courseId))&&overlaps(e.from,e.to)).map(e=>{const {history,...entry}=e;return {...entry,template:courses.get(e.courseId)||`Template ${e.courseId}`,locked:manualLocked(state,e.id)};}).sort((a,b)=>b.from.localeCompare(a.from)||a.reference.localeCompare(b.reference)),rows,excludedInvoices:targets.filter(t=>t.ambiguous).length,warnings:[...new Set(warnings)],pending:lines.filter(l=>l.numerator!==0||l.baseCents!==0),templates:templateOptions(data,config),parties:state.parties,agreements:state.agreements.map(a=>({...a,template:courses.get(a.courseId)||`Template ${a.courseId}`,recipient:parties.get(a.partyId),locked:state.settlements.some(s=>s.lines.some(l=>l.agreementId===a.id))})),settlements:state.settlements.filter(s=>(!filters.partyId||s.partyId===filters.partyId)&&(!from||s.to>=from)&&(!to||s.from<=to))};
+ const revision=createHash('sha256').update(JSON.stringify(lines.map(l=>[l.key,l.baseCents,l.numerator]).sort((a,b)=>a[0].localeCompare(b[0])))).digest('hex');
+ return {revision,manualRevenue:manualEntries.filter(e=>(!filters.courseId||String(e.courseId)===String(filters.courseId))&&overlaps(e.from,e.to)).map(e=>{const {history,...entry}=e;return {...entry,template:courses.get(e.courseId)||`Template ${e.courseId}`,locked:manualLocked(state,e.id)};}).sort((a,b)=>b.from.localeCompare(a.from)||a.reference.localeCompare(b.reference)),rows,excludedInvoices:targets.filter(t=>t.ambiguous).length,warnings:[...new Set(warnings)],pending:lines.filter(l=>l.numerator!==0||l.baseCents!==0),templates:templateOptions(data,config),parties:state.parties,agreements:state.agreements.map(a=>({...a,template:courses.get(a.courseId)||`Template ${a.courseId}`,recipient:parties.get(a.partyId),locked:state.settlements.some(s=>s.lines.some(l=>l.agreementId===a.id))})),settlements:state.settlements.filter(s=>(!filters.partyId||s.partyId===filters.partyId)&&(!from||s.to>=from)&&(!to||s.from<=to))};
 }
-export function finalize(data,state,input,syncedAt,config={}){
+export function finalize(data,state,input,syncedAt,config={},actor={}){
  if(!validDate(input.from)||!validDate(input.to)||input.from>input.to)fail('Kies een begin- en einddatum voor de afrekening.');
  if(!state.parties.some(p=>p.id===input.partyId))fail('Kies één ontvanger voor de afrekening.');
  const r=report(data,state,{from:input.from,to:input.to,partyId:input.partyId},config);
+ if(input.expectedRevision&&input.expectedRevision!==r.revision)fail('De openstaande bedragen zijn gewijzigd. Open de afrekening opnieuw en controleer de bedragen.');
  if(r.warnings.length)fail('Los eerst de gemelde toerekeningsproblemen op.');
  if(!r.pending.length)fail('Er zijn geen nieuwe royaltybedragen of correcties om vast te stellen.');
  const s={id:randomUUID(),partyId:input.partyId,recipient:state.parties.find(p=>p.id===input.partyId).name,from:input.from,to:input.to,status:'finalized',createdAt:new Date().toISOString(),syncedAt,lines:r.pending.map(({currentBase,currentNumerator,settledNumerator,...l})=>l),totals:r.rows.filter(g=>g.lines.some(l=>l.numerator!==0||l.baseCents!==0)).map(g=>({courseId:g.courseId,template:g.template,currency:g.currency,baseCents:g.baseCents,amountCents:g.dueCents}))};
+ s.createdBy={id:actor.id||null,email:actor.email||null};
+ if(input.amounts!==undefined){
+  if(!Array.isArray(input.amounts)||input.amounts.length!==s.totals.length)fail('Vul voor iedere cursus en valuta een afrekenbedrag in.');
+  const seen=new Set();
+  for(const item of input.amounts){
+   if(!item||typeof item!=='object')fail('Ongeldig afrekenbedrag.');
+   const total=s.totals.find(t=>String(t.courseId)===String(item.courseId)&&t.currency===item.currency),key=JSON.stringify([total?.courseId,item.currency]);
+   if(!total||seen.has(key))fail('Ongeldige of dubbele cursus in de afrekening.');seen.add(key);
+   const amount=cents(String(item.amount??'').trim().replace(',','.'));
+   if(amount===null||!Number.isSafeInteger(amount*10000))fail('Vul een geldig afrekenbedrag in met maximaal twee decimalen.');
+   total.calculatedCents=total.amountCents;
+   if(amount===total.amountCents)continue;
+   const lines=s.lines.filter(l=>l.courseId===total.courseId&&l.currency===total.currency);
+   const target=BigInt(amount)*10000n,original=lines.reduce((n,l)=>n+BigInt(l.numerator),0n),delta=target-original;
+   const weights=lines.map(l=>BigInt(Math.abs(l.numerator))),weight=weights.reduce((a,b)=>a+b,0n);
+   let assigned=0n;
+   for(let i=0;i<lines.length;i++){
+    const l=lines[i],part=i===lines.length-1?delta-assigned:weight?delta*weights[i]/weight:0n;assigned+=part;
+    const n=BigInt(l.numerator)+part;if(n>BigInt(Number.MAX_SAFE_INTEGER)||n<BigInt(Number.MIN_SAFE_INTEGER))fail('Het afrekenbedrag is te groot.');
+    l.calculatedNumerator=l.numerator;l.numerator=Number(n);
+   }
+   total.amountCents=amount;total.adjustmentCents=amount-total.calculatedCents;
+  }
+  if(s.totals.every(t=>t.amountCents===0)&&s.totals.some(t=>t.adjustmentCents))fail('Het afrekenbedrag mag niet voor alle cursussen nul zijn.');
+ }
+ const note=String(input.note||'').trim();if(note.length>1000)fail('Toelichting is te lang (maximaal 1000 tekens).');s.note=note;
  state.settlements.push(s);return s;
+}
+// Keep the snapshot for audit, while removing its allocation from the active balance.
+export function removeSettlement(state,id,actor={}){
+ const index=state.settlements.findIndex(s=>s.id===id);if(index<0)fail('Afrekening niet gevonden of al verwijderd.');
+ const s=state.settlements[index];state.deletedSettlements??=[];
+ state.deletedSettlements.push({...structuredClone(s),deletedAt:new Date().toISOString(),deletedBy:{id:actor.id||null,email:actor.email||null}});
+ state.settlements.splice(index,1);return {ok:true};
 }
 export function markPaid(state,id,date,reference){if(!validDate(date))fail('Vul een geldige betaaldatum in.');const s=state.settlements.find(s=>s.id===id);if(!s)fail('Afrekening niet gevonden.');if(s.status!=='finalized')fail('Deze afrekening is al als betaald gemarkeerd.');if(String(reference||'').length>200)fail('Referentie is te lang.');s.status='paid';s.paidAt=date;s.reference=String(reference||'').trim();return s;}
 export function royaltyCsv(rows){const q=v=>'"'+String(v??'').replace(/^[=+@\-\t\r]/,"'$&").replaceAll('"','""')+'"';return '\ufeff'+rows.map(row=>row.map(q).join(';')).join('\r\n');}
 export function reportCsv(r){return royaltyCsv([['Template','Ontvanger','Valuta','Eduframe','Handmatig','Royaltygrondslag','Royalty totaal','Al vastgesteld','Nog af te rekenen'],...r.rows.map(g=>[g.template,g.recipient,g.currency,(g.eduframeBase/100).toFixed(2),(g.manualBase/100).toFixed(2),(g.currentBase/100).toFixed(2),(g.royaltyCents/100).toFixed(2),(g.settledCents/100).toFixed(2),(g.dueCents/100).toFixed(2)])]);}
-export function settlementCsv(s){return royaltyCsv([['Afrekening','Ontvanger','Van','Tot','Status','Template','Valuta','Ontvangen / correctie','Royalty'],...s.totals.map(t=>[s.id,s.recipient,s.from,s.to,s.status,t.template,t.currency,(t.baseCents/100).toFixed(2),(t.amountCents/100).toFixed(2)]),[],['Bron','Betaling-ID / handmatige boeking','Referentie / factuur','Template','Datum','Omzetperiode vanaf','Omzetperiode tot','Valuta','Grondslag / correctie','Percentage','Royalty (ongerond)'],...s.lines.map(l=>[l.sourceName||'Eduframe',l.manualId||l.paymentId,l.reference||l.invoiceNumber,l.template,l.date,l.periodFrom||'',l.periodTo||'',l.currency,(l.baseCents/100).toFixed(2),l.bps/100,(l.numerator/1000000).toFixed(6)])]);}
+export function settlementCsv(s){return royaltyCsv([['Afrekening','Ontvanger','Van','Tot','Status','Template','Valuta','Ontvangen / correctie','Royalty','Berekend openstaand','Handmatige aanpassing','Toelichting'],...s.totals.map(t=>[s.id,s.recipient,s.from,s.to,s.status,t.template,t.currency,(t.baseCents/100).toFixed(2),(t.amountCents/100).toFixed(2),((t.calculatedCents??t.amountCents)/100).toFixed(2),((t.adjustmentCents||0)/100).toFixed(2),s.note||'']),[],['Bron','Betaling-ID / handmatige boeking','Referentie / factuur','Template','Datum','Omzetperiode vanaf','Omzetperiode tot','Valuta','Grondslag / correctie','Percentage','Royalty (ongerond)','Berekend vóór aanpassing (ongerond)'],...s.lines.map(l=>[l.sourceName||'Eduframe',l.manualId||l.paymentId,l.reference||l.invoiceNumber,l.template,l.date,l.periodFrom||'',l.periodTo||'',l.currency,(l.baseCents/100).toFixed(2),l.bps/100,(l.numerator/1000000).toFixed(6),((l.calculatedNumerator??l.numerator)/1000000).toFixed(6)])]);}
