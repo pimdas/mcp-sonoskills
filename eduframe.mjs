@@ -1,5 +1,8 @@
 const root = 'https://api.eduframe.nl/api/v1/';
 export const resources = {
+  users: ['id','address','invoice_address','custom'],
+  accounts: ['id','personal_user_id','account_type','address'],
+  signup_questions: ['id','title','slug','for_type','field_type','choices'],
   categories: ['id','name','parent_id','position'],
   courses: ['id','name','title','category_id','code'],
   catalog_variants: ['id','variantable_id','variantable_type'],
@@ -7,7 +10,7 @@ export const resources = {
   course_locations: ['id','name'],
   planned_courses: ['id','type','course_id','course_variant_id','course_location_id','start_date','end_date','status','current_participants','confirmed_active_and_completed_enrollments_count','max_participants','min_participants','currency'],
   enrollments: ['id','student_id','planned_course_id','order_id','status','created_at'],
-  orders: ['id','planned_course_id','catalog_variant_id','number_of_students','order_items','status','total_cost_excl','total_cost_incl','created_at','currency'],
+  orders: ['account_id','id','planned_course_id','catalog_variant_id','number_of_students','order_items','status','total_cost_excl','total_cost_incl','created_at','currency'],
   invoices: ['id','invoice_items','order_id','number','status','currency','total_excl','total_incl','total_open','opened_at','created_at']
 };
 export async function fetchResource(resource, token, fetcher=fetch, pause=ms=>new Promise(r=>setTimeout(r,ms))) {
@@ -33,7 +36,8 @@ export async function fetchResource(resource, token, fetcher=fetch, pause=ms=>ne
     const rows=await response.json();
     if(!Array.isArray(rows) || rows.some(r=>!Number.isInteger(r.id))) throw Error(`Onverwacht antwoord voor ${resource}`);
     if(resource==='invoices')for(const row of rows)if(Array.isArray(row.invoice_items))row.invoice_items=row.invoice_items.map(item=>({id:item.id,catalog_variant_id:item.catalog_variant_id,...(item.units!==undefined?{units:item.units}:{}),...(item.unit_price!==undefined?{unit_price:item.unit_price}:{})}));
-    if(resource==='orders')for(const row of rows)if(Array.isArray(row.order_items))row.order_items=row.order_items.map(item=>({id:item.id}));
+    if(resource==='orders')for(const row of rows)if(Array.isArray(row.order_items))row.order_items=row.order_items.map(item=>({id:item.id,student_id:item.student_id}));
+    if(['users','accounts'].includes(resource))for(const row of rows)for(const key of ['address','invoice_address'])if(row[key])row[key]={country:row[key].country};
     result.push(...rows.map(row=>Object.fromEntries(fields.filter(k=>row[k]!==undefined).map(k=>[k,row[k]]))));
     const link=response.headers.get('link')||'';
     const href=link.split(',').map(s=>s.match(/<([^>]+)>;\s*rel="next"/)).find(Boolean)?.[1];

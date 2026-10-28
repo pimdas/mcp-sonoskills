@@ -1,3 +1,4 @@
+import {demographics,demographicResources} from './demographics.mjs';
 import {ga4Configured,websiteReport} from './ga4.mjs';
 import {exactConfig,authorizeUrl,exchangeCode,encryptTokens,decryptTokens,refreshTokens,fetchExactData,selectedInvoices} from './exact.mjs';
 import {googleReviews} from './reviews.mjs';
@@ -46,7 +47,10 @@ async function sync() {
   syncing=true;syncError=null;
   try {
     const data={};
-    for(const name of Object.keys(resources)) data[name]=await fetchResource(name,process.env.EDUFRAME_API_TOKEN);
+    for(const name of Object.keys(resources).filter(name=>!demographicResources.includes(name))) data[name]=await fetchResource(name,process.env.EDUFRAME_API_TOKEN);
+    let demographicState;
+    try{const profiles={};for(const name of demographicResources)profiles[name]=await fetchResource(name,process.env.EDUFRAME_API_TOKEN);Object.assign(data,profiles);demographicState={syncedAt:new Date().toISOString(),error:null};}
+    catch(e){for(const name of demographicResources)if(snapshot.data[name])data[name]=snapshot.data[name];demographicState={syncedAt:snapshot.demographicState?.syncedAt||null,error:'Demografische gegevens ophalen is mislukt ('+e.message+'). Controleer de leestoegang voor contacten, accounts en aanmeldvragen in de Eduframe API-token.'};}
     const now=new Date().toISOString();
     let nextPaymentState;
     try {
@@ -55,11 +59,11 @@ async function sync() {
       for(const t of targets)payments.push(...await fetchResource(`invoices/${t.invoice.id}/payments`,process.env.EDUFRAME_API_TOKEN));
       data.payments=payments;nextPaymentState={ready:true,error:null,syncedAt:now,invoices:targets.length,scope:[...eligible].sort((a,b)=>a-b).join(',')};
     }catch(e){data.payments=snapshot.data.payments||[];nextPaymentState={ready:false,error:e.message,syncedAt:paymentState.syncedAt};}
-    const next={data,syncedAt:now,paymentState:nextPaymentState};
+    const next={data,syncedAt:now,paymentState:nextPaymentState,demographicState};
     await db.put(next);snapshot=next;paymentState=nextPaymentState;
   }catch(e){syncError=e.message;console.error('Synchronisatie mislukt:',e.message);}finally{syncing=false;}
 }
-const assets={'/sonoskills-logo-dark.png':['sonoskills-logo-dark.png','image/png'],'/sonoskills-logo.png':['sonoskills-logo.png','image/png'],'/reviews-embed.js':['reviews-embed.js','text/javascript; charset=utf-8'],'/website.js':['website.js','text/javascript; charset=utf-8'],'/social.js':['social.js','text/javascript; charset=utf-8'],'/fonts/campton-extrabold.woff':['fonts/campton-extrabold.woff','font/woff'],'/periods.js':['periods.js','text/javascript; charset=utf-8'],'/royalties.js':['royalties.js','text/javascript; charset=utf-8'],'/':['index.html','text/html; charset=utf-8'],'/app.js':['app.js','text/javascript; charset=utf-8'],'/style.css':['style.css','text/css; charset=utf-8']};
+const assets={'/demographics.js':['demographics.js','text/javascript; charset=utf-8'],'/sonoskills-logo-dark.png':['sonoskills-logo-dark.png','image/png'],'/sonoskills-logo.png':['sonoskills-logo.png','image/png'],'/reviews-embed.js':['reviews-embed.js','text/javascript; charset=utf-8'],'/website.js':['website.js','text/javascript; charset=utf-8'],'/social.js':['social.js','text/javascript; charset=utf-8'],'/fonts/campton-extrabold.woff':['fonts/campton-extrabold.woff','font/woff'],'/periods.js':['periods.js','text/javascript; charset=utf-8'],'/royalties.js':['royalties.js','text/javascript; charset=utf-8'],'/':['index.html','text/html; charset=utf-8'],'/app.js':['app.js','text/javascript; charset=utf-8'],'/style.css':['style.css','text/css; charset=utf-8']};
 const server=http.createServer(async(req,res)=>{
   const send=(status,data,type='application/json; charset=utf-8')=>{res.writeHead(status,{'Content-Type':type});res.end(type.startsWith('application/json')?JSON.stringify(data):data);};
   res.setHeader('Cache-Control','no-store');res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('X-Frame-Options','DENY');res.setHeader('Referrer-Policy','same-origin');
@@ -69,7 +73,7 @@ const server=http.createServer(async(req,res)=>{
     const url=new URL(req.url,'http://localhost');
     if(req.method==='GET' && url.pathname==='/health')return send(200,{ok:true});
     if(req.method==='GET'&&url.pathname==='/courses'){const paths={all:'/overview',handson:'/handson',elearning:'/online/elearning',ondemand:'/online/on-demand',live:'/online/live',products:'/products',external:'/external',other:'/other',fixed:'/handson',flexible:'/online/elearning'};res.writeHead(302,{Location:(paths[url.searchParams.get('workspace')]||'/overview')+url.search});return res.end();}
-    if(req.method==='GET' && ['/', '/overview','/handson','/online/elearning','/online/on-demand','/online/live','/products','/external','/other','/royalties','/data-sources','/social','/marketing','/marketing/social-media','/marketing/nieuwsbrief','/marketing/reviews','/marketing/website'].includes(url.pathname)){return send(200,await readFile(new URL('./public/index.html',import.meta.url)),'text/html; charset=utf-8');}
+    if(req.method==='GET' && ['/', '/demographics', '/overview','/handson','/online/elearning','/online/on-demand','/online/live','/products','/external','/other','/royalties','/data-sources','/social','/marketing','/marketing/social-media','/marketing/nieuwsbrief','/marketing/reviews','/marketing/website'].includes(url.pathname)){return send(200,await readFile(new URL('./public/index.html',import.meta.url)),'text/html; charset=utf-8');}
     if(req.method==='GET' && assets[url.pathname]){const [file,type]=assets[url.pathname];return send(200,await readFile(new URL(`./public/${file}`,import.meta.url)),type);}
     if(!url.pathname.startsWith('/api/'))return send(404,{error:'Niet gevonden'});
     if(req.method==='POST' && (req.headers['x-requested-with']!=='SonoSkills' || !String(req.headers['content-type']).startsWith('application/json')))return send(403,{error:'Ongeldig verzoek'});
@@ -147,10 +151,11 @@ const server=http.createServer(async(req,res)=>{
       }
       return send(404,{error:'Niet gevonden'});
     }
-    if(['/api/social','/api/newsletter','/api/dashboard','/api/analytics','/api/export','/api/finance-export'].includes(url.pathname) && req.method==='GET') {
+    if(['/api/demographics','/api/social','/api/newsletter','/api/dashboard','/api/analytics','/api/export','/api/finance-export'].includes(url.pathname) && req.method==='GET') {
       const filters=Object.fromEntries(url.searchParams);
       for(const k of ['from','to']) if(filters[k]&&!/^\d{4}-\d{2}-\d{2}$/.test(filters[k]))return send(400,{error:'Ongeldige datum'});
       if(filters.from && filters.to && filters.from>filters.to)return send(400,{error:'De einddatum ligt vóór de begindatum.'});
+      if(url.pathname==='/api/demographics')return send(200,{...demographics(snapshot.data,filters,workspaceConfig),syncing,syncedAt:snapshot.demographicState?.syncedAt||null,error:snapshot.demographicState?.error||null});
       if(url.pathname==='/api/newsletter')return send(200,{...newsletterReport(newsletter,filters),configured:!!process.env.MAILERLITE_API_TOKEN,syncing:newsletterSyncing,error:newsletterError});
       if(url.pathname==='/api/social')return send(200,{newsletter:{...newsletterReport(newsletter,filters),configured:!!process.env.MAILERLITE_API_TOKEN,syncing:newsletterSyncing,error:newsletterError},accounts:socialReport(social,filters,socialConfig()),syncing:socialSyncing,error:socialError});
       if(url.pathname==='/api/dashboard')return send(200,{...dashboard(snapshot.data,filters,workspaceConfig,selectedInvoices(exact,filters)),newsletter:{...newsletterReport(newsletter,filters),configured:!!process.env.MAILERLITE_API_TOKEN,syncing:newsletterSyncing,error:newsletterError,progress:newsletterProgress}});
