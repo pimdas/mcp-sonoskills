@@ -43,3 +43,9 @@ test('product orders without a student link are reported rather than assigned to
 test('a category filter uses billing countries from that category only',()=>{
  const d=fixture();d.accounts=d.accounts.filter(a=>a.id!==100);d.orders.find(o=>o.id===3).account_id=300;const r=demographics(d,{...period,productCategory:'elearning'});assert.equal(r.breakdowns.country[0].label,'Verenigde Staten');assert.equal(r.metrics.people,1);
 });
+
+test('clinical-domain slug is automatically recognized with or without question metadata',()=>{
+ const d=fixture();for(const u of d.users){u.custom['clinical-domain']=u.custom.field;delete u.custom.field;}d.signup_questions=d.signup_questions.filter(q=>q.slug!=='field');
+ let r=demographics(d,period);assert.equal(r.selectedFields.domain,'clinical-domain');assert.equal(r.metrics.domainKnown,2);assert.equal(r.breakdowns.domain.find(x=>x.label==='Sport').count,2);
+ d.signup_questions.push({id:3,slug:'clinical-domain',title:'Clinical domain',for_type:'user'});r=demographics(d,period);assert.equal(r.selectedFields.domain,'clinical-domain');assert.equal(r.metrics.domainKnown,2);
+});

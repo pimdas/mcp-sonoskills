@@ -2,7 +2,7 @@ import {workspaceIndex,definitions,normalize} from './workspaces.mjs';
 import {orderIndex,sellingOrder} from './orders.mjs';
 export const demographicResources=['users','accounts','signup_questions'];
 const categoryIds=['handson','elearning','live','ondemand','products'];
-const aliases={profession:['beroep','profession','occupation','jobtitle','yourprofession','what is your profession','your occupation'],domain:['professioneel domein','professional domain','professional field','werkveld','vakgebied','specialisme','specialty','speciality']};
+const aliases={profession:['beroep','profession','occupation','jobtitle','yourprofession','what is your profession','your occupation'],domain:['clinical-domain','clinical domain','professioneel domein','professional domain','professional field','werkveld','vakgebied','specialisme','specialty','speciality']};
 const clean=v=>typeof v==='string'?v.trim().replace(/\s+/g,' '):'';
 const values=v=>{const seen=new Set();return (Array.isArray(v)?v:[v]).map(x=>clean(typeof x==='object'&&x?x.value??x.label:x)).filter(x=>{const key=normalize(x);if(!key||seen.has(key))return false;seen.add(key);return true;});};
 const regionNames=new Intl.DisplayNames(['nl'],{type:'region'});
