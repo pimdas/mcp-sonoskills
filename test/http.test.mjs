@@ -43,6 +43,9 @@ test('royalty routes persist agreements, enforce payment readiness and preserve 
   assert.equal((await post('/api/royalties/agreement',{courseId:1,recipient:'Partner',percentage:'101',from:'2026-01-01'})).status,400);
   const saved=await post('/api/royalties/agreement',{courseId:1,recipient:'Partner',percentage:'10',from:'2026-01-01'});assert.equal(saved.status,200);const a=await saved.json();
   const query=await fetch(url+'/api/royalties?from=2026-01-01&to=2026-01-31',{headers:{cookie}});assert.equal((await query.json()).rows[0].dueCents,1000);
+  assert.equal((await post('/api/exact/settings',{selected:[],excluded:[],links:{},customerWorkspaces:{unknown:'handson'},customerLabels:{}})).status,400);
+  assert.equal((await post('/api/exact/settings',{selected:[],excluded:[],links:{},customerWorkspaces:{},customerLabels:{}})).status,200);
+  const exactSettings=await (await fetch(url+'/api/exact',{headers:{cookie}})).json();assert.equal(exactSettings.mainCategories.handson,'Hands-on');assert.deepEqual(exactSettings.customerLabels,{});
   const input={from:'2026-01-01',to:'2026-01-31',partyId:a.partyId};const finalized=await post('/api/royalties/finalize',input);assert.equal(finalized.status,200);const s=await finalized.json();
   assert.equal((await post('/api/royalties/finalize',input)).status,400);
   const exported=await fetch(url+'/api/royalties/settlement-export?id='+s.id,{headers:{cookie}});assert.equal(exported.status,200);assert.ok((await exported.text()).includes('10.00'));
