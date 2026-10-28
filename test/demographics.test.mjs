@@ -39,3 +39,7 @@ test('product orders without a student link are reported rather than assigned to
  const d=fixture();d.orders.push({id:10,planned_course_id:40,status:'active',created_at:'2027-03-01',creator_id:99,order_items:[{id:11}]});const r=demographics(d,period);assert.equal(r.unidentifiedProductOrders,1);assert.equal(r.metrics.people,4);assert.equal(demographics(d,{...period,productCategory:'handson'}).unidentifiedProductOrders,0);
  d.enrollments.push({id:20,order_id:10,student_id:4,planned_course_id:40,status:'active'});assert.equal(demographics(d,period).unidentifiedProductOrders,0);
 });
+
+test('a category filter uses billing countries from that category only',()=>{
+ const d=fixture();d.accounts=d.accounts.filter(a=>a.id!==100);d.orders.find(o=>o.id===3).account_id=300;const r=demographics(d,{...period,productCategory:'elearning'});assert.equal(r.breakdowns.country[0].label,'Verenigde Staten');assert.equal(r.metrics.people,1);
+});

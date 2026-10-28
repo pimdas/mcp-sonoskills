@@ -20,7 +20,7 @@ export function demographics(data,filters={},config={}){
  const activeEnrollments=(data.enrollments||[]).filter(e=>['active','confirmed','completed'].includes(e.status)),enrolledOrderIds=new Set(activeEnrollments.filter(e=>e.student_id!=null).map(e=>e.order_id));
  function add(studentId,editionId,order,date){
   if(studentId==null)return;const edition=editions.get(editionId);if(!edition||edition.status==='canceled')return;
-  const category=index.classifyEdition(edition,courses.get(edition.course_id));if(!categoryIds.includes(category))return;
+  const category=index.classifyEdition(edition,courses.get(edition.course_id));if(!categoryIds.includes(category)||(filters.productCategory&&category!==filters.productCategory))return;
   if(!inPeriod(['handson','live'].includes(category)?edition.start_date:order?.created_at||date))return;
   const p=people.get(studentId)||{id:studentId,categories:new Set(),billingCountries:new Set()};p.categories.add(category);
   const billing=country(accounts.get(order?.account_id)?.address?.country);if(billing)p.billingCountries.add(billing);people.set(studentId,p);
