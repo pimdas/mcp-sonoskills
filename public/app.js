@@ -233,25 +233,6 @@ function renderMonthlyRevenue(data,root,colors,money){
  if(monthly.unallocated)panel.append(element('p','Niet alle facturen kunnen aan één maand en werkruimte worden toegewezen. Deze bedragen ontbreken in de grafiek.','note'));
 }
 
-function renderNewsletter(n,root){
- const panel=element('section','','panel newsletter-panel');panel.append(element('h2','Nieuwsbrief · MailerLite'));root.append(panel);
- if(!n.syncedAt){panel.append(element('p',n.error||'Nog geen nieuwsbriefgegevens beschikbaar. Synchroniseer MailerLite via Databronnen.','note'));return;}
- if(n.error)panel.append(element('p',n.error,'royalty-warning'));
- if(n.groupsError)panel.append(element('p',n.groupsError,'royalty-warning'));
- const number=v=>v==null?'Nog niet beschikbaar':v.toLocaleString('nl-NL');
- const cards=element('div','','metrics newsletter-key-groups');
- for(const key of n.keyGroups||[]){const card=element('article','');card.append(element('div',key.name),element('strong',number(key.group?.counts.active)),element('small','Actieve abonnees · nu'));card.append(element('p',key.group?'Groei in periode: '+(key.netGrowth>0?'+':'')+number(key.netGrowth):'Groep niet gevonden. Synchroniseer MailerLite.','note'));cards.append(card);}panel.append(cards);
- panel.append(element('p','Bijgewerkt: '+new Date(n.syncedAt).toLocaleString('nl-NL')+'. Groepen kunnen overlappen; aantallen worden niet opgeteld.','note'));
- const details=element('details','','marketing-details');details.append(element('summary','Groei, overige groepen en contactstatussen'));panel.append(details);
- for(const key of n.keyGroups||[]){details.append(element('h3',key.name+' · groei'));if(key.netGrowth===null)details.append(element('p','Groei verschijnt na metingen op twee verschillende dagen. Eerdere groepshistorie is niet beschikbaar.','note'));else details.append(element('p','Netto groei: '+(key.netGrowth>0?'+':'')+number(key.netGrowth)+(key.baseline?' · gemeten vanaf '+key.baseline.day:'')+'.','note'));
- if(key.history.length){const scroll=element('div','','table-scroll'),table=element('table',''),head=element('tr','');for(const title of ['Meetdatum','Actieve abonnees'])head.append(element('th',title));const thead=element('thead','');thead.append(head);table.append(thead);const body=element('tbody','');for(const h of key.history){const row=element('tr','');row.append(element('td',h.day),element('td',number(h.active)));body.append(row);}table.append(body);scroll.append(table);details.append(scroll);}}
- const keyIds=new Set((n.keyGroups||[]).map(k=>k.group?.id).filter(Boolean)),others=(n.groups||[]).filter(g=>!keyIds.has(g.id));
- details.append(element('h3','Overige groepen'));if(!others.length)details.append(element('p',n.groups?'Geen overige groepen.':'Groepen zijn nog niet beschikbaar.','note'));
- for(const g of others)details.append(element('p',g.name+': '+number(g.counts.active)+' actief · '+number(g.total)+' contacten'));
- const all=element('details','');all.append(element('summary','Gehele MailerLite-database'));all.append(element('p','Alle contacten: '+number(n.total)+' · Actieve abonnees: '+number(n.counts.active)));
- for(const [key,label] of [['unsubscribed','Uitgeschreven'],['unconfirmed','Onbevestigd'],['bounced','Gebounced'],['junk','Spam']])all.append(element('p',label+': '+number(n.counts[key])));details.append(all);
-}
-
 $('#exact-connect').addEventListener('click',async()=>{try{const result=await api('/api/exact/connect',{});window.location.assign(result.url);}catch(e){$('#exact-status').textContent=e.message;}});
 
 async function loadExact(){

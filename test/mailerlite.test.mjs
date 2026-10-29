@@ -20,3 +20,8 @@ test('key group growth uses daily group identity and never total-database histor
  const report=newsletterReport(state,{from:'2026-10-01',to:'2026-10-31'});assert.deepEqual(report.keyGroups.map(g=>g.netGrowth),[7,-2]);assert.equal(report.keyGroups[0].group.counts.active,107);assert.equal(report.keyGroups[0].history.length,1);
  state.groups=[group('new','SonoSkills',1)];assert.equal(newsletterReport(state).keyGroups[0].netGrowth,null);assert.equal(newsletterReport(state).keyGroups[1].group,null);
 });
+
+test('free webinar singular and plural names resolve to the same exact group and preserve measured zero counts',()=>{
+ const state={groups:[{id:'b',name:'SonoSkills - Free Webinars',counts:{active:0},total:0}],history:[{day:'2026-10-27',groups:[{id:'b',active:0}]},{day:'2026-10-29',groups:[{id:'b',active:0}]}]};const group=newsletterReport(state).keyGroups[1];assert.equal(group.group.id,'b');assert.equal(group.group.counts.active,0);assert.equal(group.netGrowth,0);assert.equal(group.history.length,2);
+ state.groups.push({id:'c',name:'SonoSkills - Free Webinar',counts:{active:100}});assert.equal(newsletterReport(state).keyGroups[1].group,null);
+});
