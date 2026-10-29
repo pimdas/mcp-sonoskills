@@ -32,7 +32,7 @@ async function loadRoyalties(){
  $('#royalty-summary').append(royaltyTable(['Ontvanger','Royalty','Al vastgesteld','Nog af te rekenen',''],[...groups.values()].map(rows=>{const first=rows[0],sum=key=>money(rows.reduce((v,g)=>v+g[key],0),first.currency),details=element('details','','royalty-recipient-details');details.append(element('summary',`${rows.length} cursus${rows.length===1?'':'sen'}`));for(const g of rows){const course=element('details','','template-card');course.append(element('summary',`${g.template} · ${money(g.royaltyCents,g.currency)}`),royaltyTable(['Eduframe','Handmatig','Grondslag','Percentage'],[[money(g.eduframeBase,g.currency),money(g.manualBase,g.currency),money(g.currentBase,g.currency),g.rates.map(x=>x+'%').join(' / ')]]),royaltyTable(['Bron','Referentie','Periode / datum','Grondslag','Percentage','Royalty (ongerond)','Correctie'],g.lines.map(l=>[l.sourceName||'Eduframe',l.source==='manual'?l.reference:`${l.invoiceNumber} · betaling #${l.paymentId}`,l.source==='manual'?`${l.periodFrom} t/m ${l.periodTo}`:l.date,money(l.currentBase,l.currency),l.bps/100+'%',(l.currentNumerator/1000000).toLocaleString('nl-NL',{maximumFractionDigits:6})+' '+l.currency,l.adjustment?'Ja':'—'])));details.append(course);}return [first.recipient,sum('royaltyCents'),sum('settledCents'),sum('dueCents'),details];})));
  }else $('#royalty-summary').append(element('p','Nog geen royalties in deze selectie. Voeg bij Beheer een afspraak toe of kies een andere periode.'));
  const selectedParty=$('#royalty-filters').elements.partyId.value;
- $('#royalty-finalize').disabled=!selectedParty||!r.payments.ready||r.syncing||!!r.warnings.length;
+ $('#royalty-finalize').disabled=!selectedParty||!r.payments.ready||r.syncing;
  $('#royalty-agreements').replaceChildren();
  if(!r.agreements.length)$('#royalty-agreements').append(element('p','Er zijn nog geen royaltyafspraken ingesteld.'));
  else $('#royalty-agreements').append(royaltyTable(['Template','Ontvanger','Percentage','Vanaf','Tot en met','Acties'],r.agreements.map(a=>{
@@ -65,18 +65,35 @@ $('#royalty-filters').onsubmit=e=>{e.preventDefault();royaltyAction($('#royalty-
 $('#royalty-export').onclick=()=>{if($('#royalty-filters').reportValidity())location.href='/api/royalties/export?'+royaltyParams();};
 let royaltyDraft;
 function updateRoyaltyDraftTotal(){const totals=new Map();for(const row of document.querySelectorAll('.royalty-amount-row')){const amount=Number(row.querySelector('input').value.replace(',','.'));if(Number.isFinite(amount))totals.set(row.dataset.currency,(totals.get(row.dataset.currency)||0)+Math.round(amount*100));}$('#royalty-finalize-total').textContent='Totaal af te rekenen: '+[...totals].map(([currency,total])=>money(total,currency)).join(' · ');}
-$('#royalty-finalize').onclick=async e=>{const b=e.target;b.disabled=true;try{
- const input=Object.fromEntries(new FormData($('#royalty-filters')));delete input.courseId;
- const params=new URLSearchParams(Object.entries(input).filter(([,v])=>v)),r=await api('/api/royalties?'+params);
- if(!r.payments.ready||r.syncing||r.warnings.length)throw Error('Controleer de synchronisatie en eventuele waarschuwingen voordat je afrekent.');
- const rows=r.rows.filter(g=>g.lines.some(l=>l.numerator!==0||l.baseCents!==0));if(!rows.length)throw Error('Er zijn geen nieuwe royaltybedragen of correcties om vast te stellen.');
- royaltyDraft={...input,expectedRevision:r.revision};$('#royalty-finalize-form').reset();$('#royalty-finalize-message').textContent='';
- $('#royalty-finalize-selection').textContent=`${r.parties.find(p=>p.id===input.partyId)?.name||''} · ${input.from} t/m ${input.to} · alle cursussen`;
+let royaltyDraftSequence=0,royaltyDraftParty;
+function invalidateRoyaltyPeriod(){royaltyDraftSequence++;royaltyDraft=undefined;$('#royalty-finalize-submit').disabled=true;$('#royalty-finalize-amounts').replaceChildren();$('#royalty-finalize-total').textContent='';$('#royalty-finalize-message').textContent='Haal de bedragen op voor de gekozen periode.';}
+async function refreshRoyaltyDraft(){
+ const f=$('#royalty-finalize-form');invalidateRoyaltyPeriod();const sequence=royaltyDraftSequence;
+ const input={partyId:royaltyDraftParty,from:f.elements.from.value,to:f.elements.to.value};
+ if(!f.elements.from.reportValidity()||!f.elements.to.reportValidity())return;
+ if(input.from>input.to){$('#royalty-finalize-message').textContent='De einddatum moet op of na de begindatum liggen.';return;}
+ $('#royalty-finalize-message').textContent='Bedragen ophalen…';$('#royalty-finalize-refresh').disabled=true;
+ try{
+ const r=await api('/api/royalties?'+new URLSearchParams(input));if(sequence!==royaltyDraftSequence)return;
+ if(!r.payments.ready||r.syncing||r.warnings.length)throw Error(r.warnings.length?r.warnings.join(' '):'Controleer de synchronisatie voordat je afrekent.');
+ const rows=r.rows.filter(g=>g.lines.some(l=>l.numerator!==0||l.baseCents!==0));if(!rows.length)throw Error('Er zijn geen nieuwe royaltybedragen of correcties in deze periode.');
+ royaltyDraft={...input,expectedRevision:r.revision};
  $('#royalty-finalize-amounts').replaceChildren(...rows.map(g=>{const row=element('label','','royalty-amount-row');row.dataset.courseId=g.courseId;row.dataset.currency=g.currency;row.append(element('span',g.template),element('small',`Openstaand: ${money(g.dueCents,g.currency)}`));const amount=element('input');amount.type='text';amount.inputMode='decimal';amount.required=true;amount.value=(g.dueCents/100).toFixed(2);amount.setAttribute('aria-label',`Af te rekenen voor ${g.template} (${g.currency})`);amount.oninput=updateRoyaltyDraftTotal;row.append(amount,element('span',g.currency));return row;}));
- updateRoyaltyDraftTotal();$('#royalty-finalize-dialog').showModal();
- }catch(err){$('#royalty-message').textContent=err.message;}finally{b.disabled=!royaltyData?.payments.ready||!$('#royalty-filters').elements.partyId.value||royaltyData?.syncing||!!royaltyData?.warnings.length;}};
-$('#royalty-finalize-form').onsubmit=async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;try{const amounts=[...document.querySelectorAll('.royalty-amount-row')].map(row=>({courseId:row.dataset.courseId,currency:row.dataset.currency,amount:row.querySelector('input').value}));await api('/api/royalties/finalize',{...royaltyDraft,amounts,note:e.target.elements.note.value});$('#royalty-finalize-dialog').close();$('#royalty-message').textContent='Afrekening vastgesteld en bewaard.';await loadRoyalties();}catch(err){$('#royalty-finalize-message').textContent=err.message;}finally{b.disabled=false;}};
+
+ updateRoyaltyDraftTotal();$('#royalty-finalize-message').textContent='';$('#royalty-finalize-submit').disabled=false;
+ }catch(err){if(sequence===royaltyDraftSequence)$('#royalty-finalize-message').textContent=err.message;}finally{$('#royalty-finalize-refresh').disabled=false;}
+}
+for(const name of ['from','to'])$('#royalty-finalize-form').elements[name].addEventListener('input',invalidateRoyaltyPeriod);
+$('#royalty-finalize-refresh').onclick=refreshRoyaltyDraft;
+$('#royalty-finalize').onclick=()=>{
+ const input=Object.fromEntries(new FormData($('#royalty-filters'))),f=$('#royalty-finalize-form');f.reset();royaltyDraftParty=input.partyId;
+ f.elements.from.value=input.from||'';f.elements.to.value=input.to||'';
+ $('#royalty-finalize-selection').textContent=(royaltyData?.parties.find(p=>p.id===input.partyId)?.name||'')+' · alle cursussen';
+ $('#royalty-finalize-dialog').showModal();void refreshRoyaltyDraft();
+};
+$('#royalty-finalize-form').onsubmit=async e=>{e.preventDefault();if(!royaltyDraft||royaltyDraft.from!==e.target.elements.from.value||royaltyDraft.to!==e.target.elements.to.value){$('#royalty-finalize-message').textContent='Haal eerst de bedragen op voor deze periode.';return;}const b=e.submitter;b.disabled=true;try{const amounts=[...document.querySelectorAll('.royalty-amount-row')].map(row=>({courseId:row.dataset.courseId,currency:row.dataset.currency,amount:row.querySelector('input').value}));await api('/api/royalties/finalize',{...royaltyDraft,amounts,note:e.target.elements.note.value});$('#royalty-finalize-dialog').close();$('#royalty-message').textContent='Afrekening vastgesteld en bewaard.';await loadRoyalties();}catch(err){$('#royalty-finalize-message').textContent=err.message;}finally{b.disabled=false;}};
 $('#royalty-finalize-cancel').onclick=()=>$('#royalty-finalize-dialog').close();
+$('#royalty-finalize-dialog').addEventListener('close',()=>{royaltyDraftSequence++;royaltyDraft=undefined;});
 $('#royalty-delete-cancel').onclick=()=>$('#royalty-delete-dialog').close();
 $('#royalty-delete-form').onsubmit=async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;try{await api('/api/royalties/settlement/remove',{id:e.target.elements.id.value});$('#royalty-delete-dialog').close();$('#royalty-message').textContent='Afrekening verwijderd. De bedragen zijn weer beschikbaar.';await loadRoyalties();}catch(err){$('#royalty-delete-message').textContent=err.message;}finally{b.disabled=false;}};
 $('#royalty-filters').addEventListener('change',()=>{ $('#royalty-finalize').disabled=true; }); // Apply first to review the selected party.
