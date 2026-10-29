@@ -15,7 +15,6 @@ async function loadSocial(section='social'){
  const d=await api('/api/social?'+params());
  root.append(element('p','Volgers zijn de actuele aantallen. Groei volgt dagelijkse metingen vanaf de koppeling. Posts worden geselecteerd op publicatiedatum; interacties zijn de actuele totalen op die posts, inclusief later ontvangen reacties.','note'));
  if(d.error)root.append(element('p',d.error,'royalty-warning'));if(d.syncing)root.append(element('p','Social media worden gesynchroniseerd…','note'));
- renderPersonalLinkedIn(d.personal,layout);
  const number=n=>n==null?'Niet beschikbaar':n.toLocaleString('nl-NL');
  const table=(headers,rows)=>{const scroll=element('div','','table-scroll'),t=element('table',''),head=element('thead',''),tr=element('tr','');headers.forEach(h=>tr.append(element('th',h)));head.append(tr);t.append(head);const body=element('tbody','');for(const cells of rows){const row=element('tr','');for(const c of cells){const td=element('td','');if(c instanceof Node)td.append(c);else td.textContent=c;row.append(td);}body.append(row);}t.append(body);scroll.append(t);return scroll;};
  for(const a of d.accounts){const panel=element('section','','panel');const heading=element('h2','','social-platform-heading');heading.append(socialPlatformIcon(a.platform),element('span',({facebook:'Facebook',instagram:'Instagram',linkedin:'LinkedIn'})[a.platform]+(a.name?' · '+a.name:'')));panel.append(heading);layout.append(panel);
@@ -36,6 +35,7 @@ async function loadSocial(section='social'){
  const details=element('details','');details.append(element('summary','Posts en interacties'));const safeLink=p=>{try{const url=new URL(p.url);if(url.protocol!=='https:'||!['facebook.com','www.facebook.com','instagram.com','www.instagram.com','www.linkedin.com','linkedin.com'].includes(url.hostname))return p.id;const link=element('a','Open post');link.href=url.href;link.target='_blank';link.rel='noopener noreferrer';return link;}catch{return p.id;}};
  if(a.posts.length)details.append(table(['Datum','Post','Likes / reacties','Comments','Shares'],a.posts.map(p=>[p.date,safeLink(p),number(p.likes),number(p.comments),number(p.shares)])));else details.append(element('p',a.postCount===null?'Posts nog niet beschikbaar.':'Geen posts binnen deze periode.'));extra.append(details);
  }
+ renderPersonalLinkedIn(d.personal,layout);
 }
 
 async function loadMarketingReviews(panel){
