@@ -144,7 +144,7 @@ const server=http.createServer(async(req,res)=>{
     if(url.pathname==='/api/google-ads'&&req.method==='GET')return send(200,await googleAdsReport(Object.fromEntries(url.searchParams),googleAdsConfig(adsSettings)));
     if(url.pathname==='/api/website'&&req.method==='GET')return send(200,await websiteReport(Object.fromEntries(url.searchParams)));
     if(url.pathname==='/api/marketing/reviews'&&req.method==='GET')return send(200,await googleReviews());
-    if(url.pathname==='/api/social/sync'&&req.method==='POST'){if(!socialConfig().token&&!socialConfig().linkedinToken&&!personalLinkedInConfig().token)return send(409,{error:'Voeg een Meta- of LinkedIn-toegangstoken toe in Railway.'});if(socialSyncing)return send(409,{error:'Social media wordt al gesynchroniseerd.'});clearPersonalLinkedInCache();void syncSocial();return send(202,{ok:true});}
+    if(url.pathname==='/api/social/sync'&&req.method==='POST'){if(!socialConfig().token&&!socialConfig().linkedinToken&&!personalLinkedInConfig().token)return send(409,{error:'Voeg een Meta- of LinkedIn-toegangstoken toe in Railway.'});if(socialSyncing)return send(409,{error:'Social media wordt al gesynchroniseerd.'});clearPersonalLinkedInCache(true);void syncSocial();return send(202,{ok:true});}
     if(url.pathname==='/api/newsletter/sync'&&req.method==='POST'){if(!process.env.MAILERLITE_API_TOKEN)return send(409,{error:'Voeg MAILERLITE_API_TOKEN toe in Railway.'});if(newsletterSyncing)return send(409,{error:'MailerLite wordt al gesynchroniseerd.'});void syncNewsletter();return send(202,{ok:true});}
     if(url.pathname==='/api/sync' && req.method==='POST'){
       if(!process.env.EDUFRAME_API_TOKEN)return send(409,{error:'Voeg EDUFRAME_API_TOKEN toe in Railway.'});

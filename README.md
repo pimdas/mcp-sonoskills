@@ -208,3 +208,9 @@ De perioderapporten zijn vijf minuten in geheugen gecachet, per token/versie/per
 ### Nieuwsbriefgrafiek
 
 De nieuwsbriefpagina vergelijkt SonoSkills en SonoSkills Free Webinar in één interactieve lijngrafiek, met schakeling tussen netto groei en totale actieve abonnees. Netto groei gebruikt de bestaande baselineberekening; de startmeting kan vóór de geselecteerde periode liggen. Alleen echte opgeslagen groepsmetingen worden getoond, zonder historische reconstructie of nulwaarden voor ontbrekende metingen. Bij nul of één meetmoment wordt geen groei verzonnen. Series zijn apart te verbergen; meetpunten zijn te benaderen via muis en toetsenbord, en de meettabel staat onder details. De twee groepen kunnen overlappen en worden niet opgeteld. Dit is actieve-bestandsgroei, geen bruto nieuwe inschrijvingen. De groepsherkenning accepteert zowel Free Webinar als Free Webinars; bij meerdere overeenkomende groepen wordt geen willekeurige groep gekozen.
+
+### LinkedIn-aanvraaglimieten
+
+De bedrijfspagina gebruikt persistente snapshots: volgers maximaal eens per zes uur, volledige postimport maximaal eens per 24 uur. Een dagelijkse aanvraagbegroting stopt vóór 80 calls in deze importer. HTTP 429 pauzeert tot de volgende UTC-dag; de wachttijd wordt bij de bedrijfspagina opgeslagen en blijft dus na deployments actief. Een bestaande limietmelding krijgt dezelfde pauze, zonder opnieuw te proberen. Historische succesvolle postgegevens worden bewaard.
+
+Persoonlijke volgers worden maximaal eens per zes uur gelezen. Succesvolle persoonlijke perioderapporten blijven zes uur in cache; de handmatige synchronisatie verwijdert alleen foutresultaten uit die cache. Een 429 blokkeert verdere persoonlijke aanvragen in dit proces tot de UTC-reset. Deze persoonlijke perioderapportcache en blokkade zijn in geheugen en worden bij restart opnieuw opgebouwd; followerwachttijd is wel persistent.

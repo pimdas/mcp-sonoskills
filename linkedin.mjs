@@ -1,4 +1,7 @@
 import {localDay} from './mailerlite.mjs';
+const utcDay=()=>new Date().toISOString().slice(0,10);
+const nextUtcDay=()=>{const d=new Date();d.setUTCHours(24,0,0,0);return d.toISOString();};
+const recent=(date,hours)=>date&&Date.now()-Date.parse(date)<hours*3600000;
 const metric=(v,signed=false)=>Number.isSafeInteger(v)&&(signed||v>=0)?v:null;
 
 export function linkedInPost(p,organizationId){
@@ -11,13 +14,24 @@ export function linkedInPost(p,organizationId){
 }
 export async function importLinkedIn(config,previous={},fetcher=fetch){
  const id=String(config.linkedin||''),old=previous.id===id?previous:{},deadline=Date.now()+180000;
- const failed=message=>({...old,id,error:message});
+ const quota={...(old.quota||{}),day:utcDay(),used:old.quota?.day===utcDay()?old.quota.used||0:0};
+ if(!old.quota&&/API-limiet bereikt/.test(old.postsError||old.error||''))quota.retryAt=nextUtcDay();
+ const blocked=()=>Date.parse(quota.retryAt||'')>Date.now();
+ const quotaMessage=()=>`LinkedIn-limiet bereikt. Bestaande cijfers blijven beschikbaar. Automatisch opnieuw vanaf ${new Date(quota.retryAt).toLocaleString('nl-NL',{timeZone:'Europe/Amsterdam'})}.`;
+ if(blocked())return {...old,id,quota,postsError:quotaMessage()};
+ const failed=message=>({...old,id,quota,error:message});
  if(!/^\d+$/.test(id))return failed('Vul een numeriek LINKEDIN_ORGANIZATION_ID in Railway in.');
  const version=config.linkedinVersion||'202610';if(!/^\d{6}$/.test(version))return failed('Ongeldige LINKEDIN_API_VERSION. Gebruik YYYYMM.');
+ const postsDue=!old.postsSyncedAt||!recent(old.postsSyncedAt,24)||!!old.postsError;
+ if(!postsDue&&recent(old.syncedAt,6))return {...old,id,quota};
  async function get(path){
+  if(blocked())throw Error(quotaMessage());
+  if(quota.used>=80){quota.retryAt=nextUtcDay();throw Error(quotaMessage());}
+  quota.used++;
   const url=new URL(path,'https://api.linkedin.com/rest/');if(url.origin!=='https://api.linkedin.com'||!url.pathname.startsWith('/rest/'))throw Error('Ongeldige LinkedIn-paginering.');
   const remaining=deadline-Date.now();if(remaining<=0)throw Error('LinkedIn-import duurde te lang; vorige gegevens blijven bewaard.');
   let response;try{response=await fetcher(url.href,{headers:{Authorization:'Bearer '+config.linkedinToken,'LinkedIn-Version':version,'X-Restli-Protocol-Version':'2.0.0'},redirect:'error',signal:AbortSignal.timeout(Math.min(remaining,15000))});}catch{throw Error('LinkedIn is tijdelijk niet bereikbaar. Probeer later opnieuw.');}
+  if(response.status===429){quota.retryAt=nextUtcDay();throw Error(quotaMessage());}
   let detail='';if(response.status===400){try{const error=await response.json();detail=typeof error.message==='string'?error.message.replaceAll(config.linkedinToken,'[afgeschermd]').slice(0,300):'';}catch{}}
   if(!response.ok)throw Error(response.status===401?'LinkedIn-token verlopen of ongeldig. Vernieuw LINKEDIN_ACCESS_TOKEN in Railway.':response.status===403?'LinkedIn weigert toegang. Controleer Community Management API, rw_organization_admin, r_organization_social en je beheerdersrol op de pagina.':response.status===429?'LinkedIn API-limiet bereikt. Probeer later opnieuw.':`LinkedIn ${url.pathname} ophalen mislukt (HTTP ${response.status})${detail?': '+detail:''}.`);
   try{return await response.json();}catch{throw Error('LinkedIn gaf een ongeldig antwoord.');}
@@ -27,7 +41,8 @@ export async function importLinkedIn(config,previous={},fetcher=fetch){
   const urn='urn:li:organization:'+id,profile=await get('organizations/'+id),size=await get('networkSizes/'+encodeURIComponent(urn)+'?edgeType=COMPANY_FOLLOWED_BY_MEMBER');
   if(String(profile.id)!==id||metric(size.firstDegreeSize)===null)throw Error('LinkedIn gaf geen geldig profiel of volgersaantal.');
   const syncedAt=new Date().toISOString(),history=(old.history||[]).filter(h=>h.day!==localDay());history.push({day:localDay(),followers:size.firstDegreeSize});history.sort((a,b)=>a.day.localeCompare(b.day));
-  const next={...old,id,name:profile.localizedName||profile.vanityName||'LinkedIn',followers:size.firstDegreeSize,syncedAt,history,error:null};
+  const next={...old,id,quota,name:profile.localizedName||profile.vanityName||'LinkedIn',followers:size.firstDegreeSize,syncedAt,history,error:null};
+  if(!postsDue)return next;
   try{
    const raw=await list('posts?'+new URLSearchParams({q:'author',author:urn,count:'100',sortBy:'CREATED'})),posts=new Map();
    for(const p of raw){if(p.lifecycleState!=='PUBLISHED'||p.adContext?.isDsc)continue;const normalized=linkedInPost(p,id);posts.set(normalized.id,normalized);}
