@@ -1,3 +1,4 @@
+import {personalLinkedInConfig,importPersonalFollowers} from './linkedin-personal.mjs';
 import {importLinkedIn} from './linkedin.mjs';
 import {localDay} from './mailerlite.mjs';
 const count=v=>Number.isSafeInteger(v)&&v>=0?v:null;
@@ -26,6 +27,7 @@ export async function importSocial(config,previous={},fetcher=fetch,pause=ms=>ne
   }catch(e){result.accounts[platform]={...old,id,error:e.name==='TimeoutError'?'Meta reageert niet binnen de tijdslimiet.':e.message};}
  }
  if(config.linkedin&&config.linkedinToken){result.accounts.linkedin=await importLinkedIn(config,previous.accounts?.linkedin,fetcher);const a=result.accounts.linkedin;console.info('LinkedIn-synchronisatie',JSON.stringify({followers:a.followers??null,posts:a.posts?.length??null,error:a.error||a.postsError||null}));}
+ if(personalLinkedInConfig().token)result.personal=await importPersonalFollowers(personalLinkedInConfig(),previous.personal,fetcher);
  return result;
 }
 export function socialReport(state,filters={},config={}){

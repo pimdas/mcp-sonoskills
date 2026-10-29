@@ -15,6 +15,7 @@ async function loadSocial(section='social'){
  const d=await api('/api/social?'+params());
  root.append(element('p','Volgers zijn de actuele aantallen. Groei volgt dagelijkse metingen vanaf de koppeling. Posts worden geselecteerd op publicatiedatum; interacties zijn de actuele totalen op die posts, inclusief later ontvangen reacties.','note'));
  if(d.error)root.append(element('p',d.error,'royalty-warning'));if(d.syncing)root.append(element('p','Social media worden gesynchroniseerd…','note'));
+ renderPersonalLinkedIn(d.personal,layout);
  const number=n=>n==null?'Niet beschikbaar':n.toLocaleString('nl-NL');
  const table=(headers,rows)=>{const scroll=element('div','','table-scroll'),t=element('table',''),head=element('thead',''),tr=element('tr','');headers.forEach(h=>tr.append(element('th',h)));head.append(tr);t.append(head);const body=element('tbody','');for(const cells of rows){const row=element('tr','');for(const c of cells){const td=element('td','');if(c instanceof Node)td.append(c);else td.textContent=c;row.append(td);}body.append(row);}t.append(body);scroll.append(t);return scroll;};
  for(const a of d.accounts){const panel=element('section','','panel');const heading=element('h2','','social-platform-heading');heading.append(socialPlatformIcon(a.platform),element('span',({facebook:'Facebook',instagram:'Instagram',linkedin:'LinkedIn'})[a.platform]+(a.name?' · '+a.name:'')));panel.append(heading);layout.append(panel);
@@ -47,3 +48,13 @@ window.addEventListener('message',event=>{
  if(!frame||event.source!==frame.contentWindow||event.origin!=='null'||event.data?.type!=='sonoskills-review-height'||!Number.isFinite(event.data.height))return;
  frame.style.height=Math.max(180,Math.min(1800,event.data.height))+'px';
 });
+
+function renderPersonalLinkedIn(a,layout){
+ if(!a)return;const panel=element('section','','panel'),heading=element('h2','','social-platform-heading');heading.append(socialPlatformIcon('linkedin'),element('span','LinkedIn · '+a.name+' · persoonlijk'));panel.append(heading);layout.append(panel);
+ if(!a.configured){panel.append(element('p','Nog niet gekoppeld. Zodra Marc zijn token heeft aangemaakt, voeg je LINKEDIN_PERSONAL_ACCESS_TOKEN toe in Railway. De bedrijfspagina blijft apart gekoppeld.','note'));return;}
+ const cards=element('div','','metrics');for(const [label,value] of [['Volgers · nu',a.followers],['Gemeten volgersgroei',a.growth],['Impressions',a.metrics.IMPRESSION],['Bereikte leden',a.metrics.MEMBERS_REACHED],['Reacties',a.metrics.REACTION],['Comments',a.metrics.COMMENT],['Reposts',a.metrics.RESHARE]]){const card=element('article');card.append(element('div',label),element('strong',value==null?'Niet beschikbaar':value.toLocaleString('nl-NL')));cards.append(card);}panel.append(cards);
+ panel.append(element('p',`Periode: ${a.from} t/m ${a.to}. Dit zijn de door LinkedIn gerapporteerde profielbrede resultaten binnen deze periode, over alle berichten. Dit verschilt van de bedrijfspagina, die berichten op publicatiedatum selecteert. Bereik van beide accounts wordt niet opgeteld. LinkedIn meldt dat reacties, comments en reposts kunnen afwijken van de LinkedIn-interface.`,'note'));
+ if(a.metricsSyncedAt)panel.append(element('p','Poststatistieken bijgewerkt: '+new Date(a.metricsSyncedAt).toLocaleString('nl-NL'),'note'));
+ for(const message of [...new Set([...(a.errors||[]),...(a.metricErrors||[])])])panel.append(element('p',message,'royalty-warning'));
+ panel.append(element('p','Volgers worden dagelijks vastgelegd vanaf koppeling. Een lijst met persoonlijke berichten is niet beschikbaar via deze twee analytics-rechten.','note'));
+}
