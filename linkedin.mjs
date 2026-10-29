@@ -1,5 +1,14 @@
 import {localDay} from './mailerlite.mjs';
 const metric=(v,signed=false)=>Number.isSafeInteger(v)&&(signed||v>=0)?v:null;
+
+export function linkedInPost(p,organizationId){
+ const author=typeof p.author==='string'?/^urn:li:(?:organization|organizationBrand|company):(\d+)$/.exec(p.author):null;
+ if(!author||author[1]!==String(organizationId))throw Error('LinkedIn-bericht heeft een ontbrekende of afwijkende organisatie als auteur.');
+ if(!/^urn:li:(share|ugcPost):\d+$/.test(p.id||''))throw Error('LinkedIn-bericht heeft een ontbrekend of niet ondersteund bericht-ID.');
+ const raw=p.publishedAt??p.createdAt,timestamp=typeof raw==='string'&&/^\d+$/.test(raw)?Number(raw):raw;
+ if(!Number.isSafeInteger(timestamp)||timestamp<=0||!Number.isFinite(new Date(timestamp).getTime()))throw Error('LinkedIn-bericht mist zowel een geldige publicatiedatum als aanmaakdatum.');
+ return {id:p.id,date:new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Amsterdam',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(timestamp)),dateSource:p.publishedAt==null?'created':'published',url:'https://www.linkedin.com/feed/update/'+encodeURIComponent(p.id)+'/',likes:null,comments:null,shares:null,impressions:null,clicks:null};
+}
 export async function importLinkedIn(config,previous={},fetcher=fetch){
  const id=String(config.linkedin||''),old=previous.id===id?previous:{},deadline=Date.now()+180000;
  const failed=message=>({...old,id,error:message});
@@ -20,7 +29,7 @@ export async function importLinkedIn(config,previous={},fetcher=fetch){
   const next={...old,id,name:profile.localizedName||profile.vanityName||'LinkedIn',followers:size.firstDegreeSize,syncedAt,history,error:null};
   try{
    const raw=await list('posts?'+new URLSearchParams({q:'author',author:urn,count:'100',sortBy:'CREATED'})),posts=new Map();
-   for(const p of raw){if(p.lifecycleState!=='PUBLISHED'||p.adContext?.isDsc)continue;if(p.author!==urn||!/^urn:li:(share|ugcPost):\d+$/.test(p.id||'')||!Number.isSafeInteger(p.publishedAt)||p.publishedAt<=0)throw Error('LinkedIn-bericht mist een geldige auteur, ID of publicatiedatum.');posts.set(p.id,{id:p.id,date:new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Amsterdam',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(p.publishedAt)),url:'https://www.linkedin.com/feed/update/'+encodeURIComponent(p.id)+'/',likes:null,comments:null,shares:null,impressions:null,clicks:null});}
+   for(const p of raw){if(p.lifecycleState!=='PUBLISHED'||p.adContext?.isDsc)continue;const normalized=linkedInPost(p,id);posts.set(normalized.id,normalized);}
    for(const type of ['share','ugcPost']){const ids=[...posts.keys()].filter(id=>id.startsWith('urn:li:'+type+':'));for(let start=0;start<ids.length;start+=20){const batch=ids.slice(start,start+20),q=new URLSearchParams({q:'organizationalEntity',organizationalEntity:urn});q.set(type==='share'?'shares':'ugcPosts','List('+batch.join(',')+')');const stats=await list('organizationalEntityShareStatistics?'+q);for(const item of stats){const post=posts.get(item.share||item.ugcPost);if(!post||!batch.includes(post.id)||item.organizationalEntity!==urn)throw Error('LinkedIn-statistieken horen niet bij de gevraagde berichten.');const t=item.totalShareStatistics||{};Object.assign(post,{likes:metric(t.likeCount,true),comments:metric(t.commentCount),shares:metric(t.shareCount),impressions:metric(t.impressionCount),clicks:metric(t.clickCount)});}}}
    next.posts=[...posts.values()];next.postsSyncedAt=syncedAt;next.postsError=null;
   }catch(e){next.postsError=e.message;}

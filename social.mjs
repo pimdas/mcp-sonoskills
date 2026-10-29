@@ -25,7 +25,7 @@ export async function importSocial(config,previous={},fetcher=fetch,pause=ms=>ne
    result.accounts[platform]=next;
   }catch(e){result.accounts[platform]={...old,id,error:e.name==='TimeoutError'?'Meta reageert niet binnen de tijdslimiet.':e.message};}
  }
- if(config.linkedin&&config.linkedinToken)result.accounts.linkedin=await importLinkedIn(config,previous.accounts?.linkedin,fetcher);
+ if(config.linkedin&&config.linkedinToken){result.accounts.linkedin=await importLinkedIn(config,previous.accounts?.linkedin,fetcher);const a=result.accounts.linkedin;console.info('LinkedIn-synchronisatie',JSON.stringify({followers:a.followers??null,posts:a.posts?.length??null,error:a.error||a.postsError||null}));}
  return result;
 }
 export function socialReport(state,filters={},config={}){
