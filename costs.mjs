@@ -25,3 +25,17 @@ export function costsReport(state={},mapping={},filters={},comparison=true){
  if(comparison&&from&&to&&state.syncedAt){const start=Date.parse(from+'T00:00:00Z'),end=Date.parse(to+'T00:00:00Z'),span=end-start+86400000;if(Number.isFinite(span)&&span>0){const beforeFrom=new Date(start-span).toISOString().slice(0,10),beforeTo=new Date(start-86400000).toISOString().slice(0,10);if(beforeFrom>=state.from&&beforeTo<=state.to){const prior=costsReport(state,mapping,{from:beforeFrom,to:beforeTo},false);previous={from:beforeFrom,to:beforeTo,total:prior.total};}}}
  return {previous,ready:!!state.syncedAt,currency:state.currency||null,syncedAt:state.syncedAt||null,coverage:{from:state.from,to:state.to},partial:!!state.syncedAt&&((from&&from<state.from)||(to&&to>state.to)),from,to,total,unassigned,unassignedCount,categories:Object.entries(costCategories).map(([id,name])=>({id,name,cents:categories[id]||0})),months:Object.entries(months).sort().map(([month,cents])=>({month,cents})),suppliers:Object.values(suppliers).sort((a,b)=>b.cents-a.cents),lines:lines.sort((a,b)=>b.date.localeCompare(a.date)),accountCount:accounts.size,mappedCount:[...accounts.keys()].filter(id=>mapping[id]).length};
 }
+
+// Suggestions are a reviewable draft, never an automatic accounting decision.
+export function suggestCostMapping(accounts=[]){
+ const rules=[
+  ['trainers',/\b(docent\w*|trainer\w*|royalt\w*|auteurs?recht\w*|sprekers?\w*|instructeurs?\w*)\b/,'Docenten, sprekers of auteursvergoedingen'],
+  ['venues',/\b(catering|zaalhuur|cursuslocatie\w*|lesruimte\w*|congresruimte\w*|lunch\w*|cadaver\w*)\b/,'Cursuslocatie of catering'],
+  ['travel',/\b(reis\w*|verblijf\w*|hotel\w*|vlieg\w*|vlucht\w*|kilometer\w*|parkeer\w*|taxi\w*|autokosten|brandstof\w*|leaseauto\w*)\b/,'Reizen, vervoer of verblijf'],
+  ['equipment',/\b(apparatuur\w*|echosysteem\w*|echografieappar\w*|verbruiksmaterial\w*|lesmateriaal\w*|cursusmateriaal\w*|instrument\w*|inventaris\w*|onderhoudskosten apparatuur)\b/,'Apparatuur, inventaris of lesmateriaal'],
+  ['marketing',/\b(marketing\w*|advertent\w*|reclame\w*|promotie\w*|sponsoring|beurskosten|google ads|facebook ads)\b/,'Marketing en promotie'],
+  ['software',/\b(software\w*|hosting\w*|domein\w*|licentie\w*|eduframe|mailerlite|railway|saas|ict\w*|automatisering\w*|internetkosten)\b/,'Software, ICT of online platformen'],
+  ['organization',/\b(accountant\w*|administratie\w*|boekhoud\w*|verzeker\w*|bankkosten|betalingsverkeer|kantoor\w*|telefoon\w*|telefonie|porto\w*|personeel\w*|loon\w*|salaris\w*|pensioen\w*|sociale lasten|juridisch\w*|advieskosten|huisvesting\w*|energie\w*|schoonmaak\w*)\b/,'Algemene organisatiekosten']
+ ];
+ const suggestions={};for(const a of accounts){const text=String(a.name||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');const matches=rules.filter(([,pattern])=>pattern.test(text));if(matches.length===1)suggestions[a.id]={category:matches[0][0],reason:matches[0][2]};}return suggestions;
+}
