@@ -200,7 +200,7 @@ const server=http.createServer(async(req,res)=>{
 server.listen(Number(process.env.PORT||3000),'0.0.0.0',()=>console.log('SonoSkills dashboard gestart'));
 const minutes=Math.max(15,Number(process.env.SYNC_INTERVAL_MINUTES)||60);
 const timer=setInterval(()=>{void sync();void syncNewsletter();void syncSocial();void syncExact();},minutes*60e3);
-if(exact.tokens&&!exact.costsAttemptedAt)void syncExact();
+if(exact.tokens&&(!exact.costsAttemptedAt||exact.costs?.version!==2))void syncExact({forceCosts:true});
 if(process.env.MAILERLITE_API_TOKEN)void syncNewsletter();
 if(socialConfig().token||socialConfig().linkedinToken||personalLinkedInConfig().token)void syncSocial();
 if(process.env.EDUFRAME_API_TOKEN)void sync();
