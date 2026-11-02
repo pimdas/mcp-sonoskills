@@ -4,16 +4,16 @@ const cents=v=>v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v))&&Numb
 export async function fetchCosts(token,division,fetcher=fetch,now=new Date()){
  if(!Number.isSafeInteger(division)||division<1)throw Error('Exact-administratie ontbreekt.');
  const from=`${now.getUTCFullYear()-1}-01-01`,until=`${now.getUTCFullYear()+1}-01-01`;let calls=0;const deadline=Date.now()+180000;
- const bounded=async(...args)=>{if(++calls>200||Date.now()>deadline)throw Error('Kostenimport te groot; vorige gegevens zijn bewaard.');return fetcher(...args);};
+ const bounded=async(...args)=>{for(let attempt=0;attempt<3;attempt++){if(++calls>200||Date.now()>deadline)throw Error('Kostenimport te groot; vorige gegevens zijn bewaard.');const response=await fetcher(...args);if(response.status!==429||attempt===2)return response;const wait=Math.max(1000,Number(response.headers.get('Retry-After')||60)*1000);if(!Number.isFinite(wait)||wait>60000||Date.now()+wait>deadline)throw Error('Exact API-limiet bereikt. Probeer de kosten later opnieuw te synchroniseren.');await new Promise(resolve=>setTimeout(resolve,wait));}};
  const accounts=await readExact(`/api/v1/${division}/financial/GLAccounts?$select=ID,Code,Description,BalanceType,BalanceSide&$filter=BalanceType%20eq%20%27W%27%20and%20BalanceSide%20eq%20%27D%27`,token,bounded);
  const divisions=await readExact(`/api/v1/${division}/system/Divisions?$select=Code,Currency&$filter=Code%20eq%20${division}`,token,bounded),currency=divisions.find(d=>Number(d.Code)===division)?.Currency;
  if(!/^[A-Z]{3}$/.test(currency||''))throw Error('Administratievaluta voor kosten ontbreekt.');
  const ids=new Set(accounts.filter(a=>a.BalanceType==='W'&&a.BalanceSide==='D').map(a=>a.ID));
  const filter=`(Status eq 20 or Status eq 50) and Date ge datetime'${from}T00:00:00' and Date lt datetime'${until}T00:00:00'`;
- const raw=await readExact(`/api/v1/${division}/financialtransaction/TransactionLines?$filter=${encodeURIComponent(filter)}&$select=ID,EntryID,Date,GLAccount,Account,AccountName,Description,AmountDC,InvoiceNumber,Status`,token,bounded);
+ const raw=await readExact(`/api/v1/${division}/bulk/Financial/TransactionLines?$filter=${encodeURIComponent(filter)}&$select=ID,EntryID,Date,GLAccount,Account,AccountName,Description,AmountDC,InvoiceNumber,Status`,token,bounded);
  const seen=new Set(),lines=[];
  for(const r of raw){if(!ids.has(r.GLAccount)||![20,50].includes(r.Status)||seen.has(r.ID))continue;const amount=cents(r.AmountDC),date=exactDate(r.Date);if(!r.ID||amount===null||!date)throw Error('Exact gaf een kostenregel met een ongeldig bedrag of datum; vorige gegevens zijn bewaard.');if(date<from||date>=until)continue;seen.add(r.ID);lines.push({id:r.ID,status:r.Status,entryId:r.EntryID,date,glAccount:r.GLAccount,supplierId:r.Account||'',supplier:r.AccountName||'Zonder leverancier',description:r.Description||'',invoice:r.InvoiceNumber==null?'':String(r.InvoiceNumber),cents:amount});}
- return {version:2,accounts:accounts.filter(a=>a.BalanceType==='W'&&a.BalanceSide==='D').map(a=>({id:a.ID,code:a.Code?.trim()||'',name:a.Description||a.Code||a.ID})),lines,currency,from,to:`${now.getUTCFullYear()}-12-31`,syncedAt:now.toISOString()};
+ return {version:3,accounts:accounts.filter(a=>a.BalanceType==='W'&&a.BalanceSide==='D').map(a=>({id:a.ID,code:a.Code?.trim()||'',name:a.Description||a.Code||a.ID})),lines,currency,from,to:`${now.getUTCFullYear()}-12-31`,syncedAt:now.toISOString()};
 }
 export function validateCostMapping(input,accounts){if(!input||typeof input!=='object'||Array.isArray(input))throw Error('Ongeldige kostenindeling.');const ids=new Set(accounts.map(a=>a.id)),result={};for(const [id,category] of Object.entries(input)){if(!ids.has(id)||(!Object.hasOwn(costCategories,category)&&category!=='ignore'))throw Error('Kies een geldige kostenrekening en categorie.');result[id]=category;}return result;}
 export function costsReport(state={},mapping={},filters={},comparison=true){
