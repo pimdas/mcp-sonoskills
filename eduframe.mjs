@@ -1,3 +1,4 @@
+export const teacherResources={teachers:['id','first_name','middle_name','last_name','active'],meetings:['id','name','planned_course_id','start_date_time','end_date_time','meeting_location_id','status','planning_attendees'],meeting_locations:['id','name','course_location_id']};
 const root = 'https://api.eduframe.nl/api/v1/';
 export const resources = {
   users: ['id','address','invoice_address','custom'],
@@ -8,16 +9,16 @@ export const resources = {
   catalog_variants: ['id','variantable_id','variantable_type'],
   course_variants: ['id','name'],
   course_locations: ['id','name'],
-  planned_courses: ['id','type','course_id','course_variant_id','course_location_id','start_date','end_date','status','current_participants','confirmed_active_and_completed_enrollments_count','max_participants','min_participants','currency'],
+  planned_courses: ['id','type','course_id','course_variant_id','course_location_id','start_date','end_date','status','current_participants','confirmed_active_and_completed_enrollments_count','max_participants','min_participants','currency','teacher_ids'],
   enrollments: ['id','student_id','planned_course_id','order_id','status','created_at'],
   orders: ['account_id','id','planned_course_id','catalog_variant_id','number_of_students','order_items','status','total_cost_excl','total_cost_incl','created_at','currency'],
   invoices: ['id','invoice_items','order_id','number','status','currency','total_excl','total_incl','total_open','opened_at','created_at']
 };
 export async function fetchResource(resource, token, fetcher=fetch, pause=ms=>new Promise(r=>setTimeout(r,ms))) {
   const paymentPath=/^invoices\/\d+\/payments$/.test(resource);
-  if (!Object.hasOwn(resources,resource)&&!paymentPath) throw Error('Onbekende databron');
-  const fields=paymentPath?['id','invoice_id','amount','currency','status','date']:resources[resource];
-  let next = new URL(`${resource==='catalog_variants'?'catalog/variants':resource}?per_page=100`,root), result=[], seen=new Set();
+  if (!Object.hasOwn(resources,resource)&&!Object.hasOwn(teacherResources,resource)&&!paymentPath) throw Error('Onbekende databron');
+  const fields=paymentPath?['id','invoice_id','amount','currency','status','date']:(resources[resource]||teacherResources[resource]);
+  let next = new URL(`${resource==='catalog_variants'?'catalog/variants':resource}?per_page=100${resource==='meetings'?'&status=all':''}`,root), result=[], seen=new Set();
   while(next) {
     if(next.origin!==new URL(root).origin || !next.pathname.startsWith('/api/v1/')) throw Error('Ongeldige paginaverwijzing');
     if(seen.has(next.href)) throw Error('Herhaalde paginaverwijzing');
@@ -34,6 +35,7 @@ export async function fetchResource(resource, token, fetcher=fetch, pause=ms=>ne
     }
     if(!response.ok) throw Error(`Eduframe ${resource}: HTTP ${response.status}`);
     const rows=await response.json();
+    if(resource==='meetings'&&Array.isArray(rows))for(const row of rows)if(Array.isArray(row.planning_attendees))row.planning_attendees=row.planning_attendees.map(a=>({teacher_id:a.teacher_id}));
     if(!Array.isArray(rows) || rows.some(r=>!Number.isInteger(r.id))) throw Error(`Onverwacht antwoord voor ${resource}`);
     if(resource==='invoices')for(const row of rows)if(Array.isArray(row.invoice_items))row.invoice_items=row.invoice_items.map(item=>({id:item.id,catalog_variant_id:item.catalog_variant_id,...(item.units!==undefined?{units:item.units}:{}),...(item.unit_price!==undefined?{unit_price:item.unit_price}:{})}));
     if(resource==='orders')for(const row of rows)if(Array.isArray(row.order_items))row.order_items=row.order_items.map(item=>({id:item.id,student_id:item.student_id}));
