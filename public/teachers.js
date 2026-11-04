@@ -1,6 +1,6 @@
 let teacherCourseSelection={course:''},teacherCourseRequest=0;
 let teacherTab='overview',teacherFilter={teacher:'',kind:'',location:'',sort:'name'},teacherRequest=0,teacherPoll;
-const teacherDate=v=>v?new Date(v+'T12:00:00Z').toLocaleDateString('nl-NL',{day:'numeric',month:'short',year:'numeric'}):'Datum onbekend';
+const teacherDate=v=>v?new Date(v+'T12:00:00Z').toLocaleDateString('nl-NL',{weekday:'long',day:'numeric',month:'long',year:'numeric',timeZone:'Europe/Amsterdam'}):'Datum onbekend';
 const teacherTime=v=>v&&Number.isFinite(Date.parse(v))?new Date(v).toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit',timeZone:'Europe/Amsterdam'}):'—';
 function teacherTable(target,labels,rows){const wrap=element('div','','table-scroll'),table=element('table'),thead=element('thead'),tr=element('tr');for(const text of labels){const th=element('th',text);th.scope='col';tr.append(th);}thead.append(tr);table.append(thead);const body=element('tbody');for(const values of rows){const row=element('tr');for(const v of values){const td=element('td');if(v instanceof Node)td.append(v);else td.textContent=v;row.append(td);}body.append(row);}table.append(body);wrap.append(table);target.append(wrap);}
 async function loadTeachers(){
