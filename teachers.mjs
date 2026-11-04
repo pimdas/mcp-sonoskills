@@ -37,12 +37,12 @@ export function teachersReport(state={},filters={},config={},now=new Date()){
 }
 
 
-export function teacherCourseReport(state={},filters={},config={}){
+export function teacherCourseReport(state={},filters={},config={},now=new Date()){
  // Validate the requested period, then retrieve whole editions without teacher/day truncation.
  teachersReport(state,{from:filters.from,to:filters.to},config);
  const all=teachersReport(state,{kind:filters.kind,location:filters.location},config);
  const editions=all.editions.filter(e=>{const dates=all.planning.filter(r=>r.editionId===e.id).map(r=>r.date).sort(),start=dates[0]||e.start,end=dates.at(-1)||e.end;return (!filters.from||!end||end>=filters.from)&&(!filters.to||!start||start<=filters.to);}).sort((a,b)=>a.start.localeCompare(b.start)||a.location.localeCompare(b.location)||a.id.localeCompare(b.id));
  const courses=[...new Map(editions.map(e=>[e.courseId,{id:e.courseId,name:e.name}])).values()].sort((a,b)=>a.name.localeCompare(b.name));
- const course=courses.some(c=>c.id===filters.course)?filters.course:'';const choices=editions.filter(e=>e.courseId===course);const edition=choices.find(e=>e.id===filters.edition)||(!filters.edition&&choices.length===1?choices[0]:null);
+ const course=courses.some(c=>c.id===filters.course)?filters.course:'';const today=day(now),choices=editions.filter(e=>e.courseId===course).map(e=>{const planning=all.planning.filter(r=>r.editionId===e.id),next=planning.find(r=>r.date>=today)?.date||(e.end>=today?(e.start>=today?e.start:today):'');return {...e,planning,issues:all.issues.filter(r=>r.editionId===e.id),next};}).sort((a,b)=>{const rank=e=>e.next?0:e.start?1:2;return rank(a)-rank(b)||(a.next&&b.next?a.next.localeCompare(b.next):b.start.localeCompare(a.start))||a.id.localeCompare(b.id);});const edition=choices.find(e=>e.id===filters.edition)||(!filters.edition&&choices.length===1?choices[0]:null);
  return {ready:all.ready,courses,editions:choices,course,edition:edition||null,planning:edition?all.planning.filter(r=>r.editionId===edition.id):[],issues:edition?all.issues.filter(r=>r.editionId===edition.id):[]};
 }
