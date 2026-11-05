@@ -1,5 +1,5 @@
 import {readExact,exactDate} from './exact.mjs';
-export const costCategories={trainers:'Docenten & royalties',venues:'Locaties & catering',travel:'Reis & verblijf',equipment:'Materialen & apparatuur',marketing:'Marketing',software:'Software & platformen',personnel:'Personeel & management',organization:'Organisatie'};
+export const costCategories={trainers:'Docenten & royalties',venues:'Locaties & catering',travel:'Reis & verblijf',equipment:'Materialen & apparatuur',marketing:'Marketing',software:'Software & platformen',personnel:'Personeel & management',organization:'Organisatie',holding:'Holding'};
 const cents=v=>v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v))&&Number.isSafeInteger(Math.round(Number(v)*100))?Math.round(Number(v)*100):null;
 export async function fetchCosts(token,division,fetcher=fetch,now=new Date()){
  if(!Number.isSafeInteger(division)||division<1)throw Error('Exact-administratie ontbreekt.');
@@ -38,5 +38,5 @@ export function suggestCostMapping(accounts=[]){
   ['personnel',/\b(personeel\w*|loon\w*|salaris\w*|pensioen\w*|sociale lasten|management\w*|directie\w*|bestuurders?\w*)\b/,'Personeelskosten en managementvergoedingen'],
   ['organization',/\b(accountant\w*|administratie\w*|boekhoud\w*|verzeker\w*|bankkosten|betalingsverkeer|kantoor\w*|telefoon\w*|telefonie|porto\w*|juridisch\w*|advieskosten|huisvesting\w*|energie\w*|schoonmaak\w*)\b/,'Algemene organisatiekosten']
  ];
- const suggestions={};for(const a of accounts){const text=String(a.name||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');const matches=rules.filter(([,pattern])=>pattern.test(text));if(matches.length===1)suggestions[a.id]={category:matches[0][0],reason:matches[0][2]};}return suggestions;
+ const suggestions={};for(const a of accounts){const text=String(a.name||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');if(/\b(holding\w*|management\w*|huur(?:kosten)? (?:van )?(?:assets?|activa|apparatuur|inventaris))\b/.test(text)){suggestions[a.id]={category:'holding',reason:'Managementkosten of huur van assets / holding'};continue;}const matches=rules.filter(([,pattern])=>pattern.test(text));if(matches.length===1)suggestions[a.id]={category:matches[0][0],reason:matches[0][2]};}return suggestions;
 }
