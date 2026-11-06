@@ -151,7 +151,7 @@ async function navigate(path){
 }
 function restorePeriod(){
  $('#filters').elements.sort.value=['name','sales_desc','sales_asc','upcoming'].includes(pendingFilters.sort)?pendingFilters.sort:'name';
- const select=$('#filters [data-period-preset]');select.value=['month','quarter','year','custom'].includes(pendingFilters.period)?pendingFilters.period:(pendingFilters.from||pendingFilters.to?'custom':'year');
+ const select=$('#filters [data-period-preset]');select.value=['month','quarter','year','future','custom'].includes(pendingFilters.period)?pendingFilters.period:(pendingFilters.from||pendingFilters.to?'custom':'year');
  if(select.value==='custom'){for(const key of ['from','to'])$('#filters').elements[key].value=pendingFilters[key]||'';}
  $('#filters').updatePeriod();
 }

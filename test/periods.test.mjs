@@ -1,0 +1,7 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import vm from 'node:vm';
+import {readFileSync} from 'node:fs';
+function context(){const c={document:{querySelectorAll:()=>[]},setTimeout};vm.createContext(c);vm.runInContext(readFileSync(new URL('../public/periods.js',import.meta.url),'utf8'),c);return c;}
+test('future preset is open-ended and uses todays date in Amsterdam, including UTC day boundary',()=>{const c=context();for(const [now,expected] of [['2026-11-05T23:30:00Z','2026-11-06'],['2026-12-31T23:30:00Z','2027-01-01']]){const r=c.periodRange('future',new Date(now));assert.equal(r.from,expected);assert.equal(r.to,'');}assert.equal(c.periodRange('year',new Date('2026-11-06')).to,'2026-12-31');});
+test('future selection permits empty end date; custom restores required validation and clears summary',()=>{const c=context(),select={value:'future',addEventListener(){}},summary={},field={},form={elements:{from:{value:''},to:{value:'2026-12-31',required:true}},querySelector:s=>s==='[data-period-preset]'?select:summary,querySelectorAll:()=>[field],addEventListener(){}};c.setupPeriod(form);assert.equal(form.elements.to.value,'');assert.equal(form.elements.to.required,false);assert.match(summary.textContent,/geen einddatum/);assert.equal(field.hidden,true);select.value='custom';form.updatePeriod();assert.equal(form.elements.to.required,true);assert.equal(field.hidden,false);assert.equal(summary.hidden,true);select.value='year';form.updatePeriod();assert.match(form.elements.to.value,/12-31$/);});
